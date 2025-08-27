@@ -101,7 +101,7 @@ jobs:
               echo "Updating environment variables for $lambda"
               aws lambda update-function-configuration \
                 --function-name $lambda \
-                --environment "Variables=${LAMBDA_ENV[$lambda]}"
+                --environment="Variables=${LAMBDA_ENV[$lambda]}"
 
               # Update Lambda code only
               aws lambda update-function-code \
