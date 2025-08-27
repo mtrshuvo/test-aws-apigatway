@@ -14,19 +14,11 @@ on:
 jobs:
   deploy-stage:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Check if AWS_ACCESS_KEY_ID is set
-        run: |
-          if [ -z "${{ secrets.AWS_ACCESS_KEY }}" ]; then
-            echo "❌ AWS_ACCESS_KEY_ID is missing"
-            exit 1
-          else
-            echo "✅ AWS_ACCESS_KEY_ID is set"
-          fi
 
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v2
