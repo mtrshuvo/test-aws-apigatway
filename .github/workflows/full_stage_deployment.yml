@@ -150,7 +150,7 @@ jobs:
           ROUTES_ORIGIN["/pdf-url"]=$DOMAIN
 
           for route in "${!ROUTES_TYPE[@]}"; do
-            RESOURCE_ID=<get-resource-id-for-$route>
+            RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
             TYPE=${ROUTES_TYPE[$route]}
             AUTHORIZE_ID=${ROUTES_AUTHORIZE[$route]}
             ORIGIN=${ROUTES_ORIGIN[$route]}
@@ -162,7 +162,7 @@ jobs:
                 --resource-id $RESOURCE_ID \
                 --http-method OPTIONS \
                 --status-code 200 \
-                --response-models '{"application/json": "Empty"}'
+                --response-models '{"application/json": "Empty"}\'
 
               aws apigateway put-integration-response \
                 --rest-api-id $REST_API_ID \
