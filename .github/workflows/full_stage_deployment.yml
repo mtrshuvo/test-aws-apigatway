@@ -105,11 +105,19 @@ jobs:
                 --environment file://env.json
               rm env.json
 
+               # Wait for configuration update to complete
+              echo "Waiting for configuration update to complete..."
+              aws lambda wait function-updated --function-name $lambda
+
               # Update Lambda code only
               aws lambda update-function-code \
                 --function-name $lambda \
                 --zip-file fileb://$lambda.zip \
                 --publish
+
+               # Wait for configuration update to complete
+              echo "Waiting for configuration update to complete..."
+              aws lambda wait function-updated --function-name $lambda
 
               VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
 
