@@ -30,17 +30,18 @@ jobs:
       - name: Set environment
         id: env
         run: |
-          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT  
+          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT       
+
+      - name: Deploy Lambdas if changed / new
+        env:
           ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
           COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
           COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
           COGNITO_REDIRECT_URI: ${{ vars.COGNITO_REDIRECT_URI }}
-          ORIGIN: ${{ vars.ORIGIN }}
           BOOK_KEY: ${{ vars.BOOK_KEY }}
           EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
-          USER_POOL_ID: ${{ vars.USER_POOL_ID }}     
-
-      - name: Deploy Lambdas if changed / new
+          ORIGIN: ${{ vars.ORIGIN }}
+          USER_POOL_ID: ${{ vars.USER_POOL_ID }}
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
