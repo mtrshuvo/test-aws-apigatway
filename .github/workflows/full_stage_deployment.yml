@@ -38,7 +38,7 @@ jobs:
       - name: Deploy Lambdas if changed / new
         run: |
           ENV=${{ steps.env.outputs.ENV }}
-          LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")   # Add Lambda names as needed
+          LAMBDAS=("get_google_sign_in_url","get_ebook_metadata")   # Add Lambda names as needed
 
           declare -A LAMBDA_RUNTIME # Define runtimes for each Lambda
           LAMBDA_RUNTIME["get_google_sign_in_url"]="3.13"
