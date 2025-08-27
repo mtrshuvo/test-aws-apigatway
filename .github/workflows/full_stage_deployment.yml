@@ -152,11 +152,11 @@ jobs:
           for route in "${!ROUTES_TYPE[@]}"; do
             RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
             TYPE=${ROUTES_TYPE[$route]}
-            AUTHORIZE_ID=AUTHORIZE_ID=$(aws apigateway get-authorizers \
+            AUTHORIZE_ID=$(aws apigateway get-authorizers \
                         --rest-api-id $REST_API_ID \
                         --query "items[?name=='teen_${ENV}_authorizer'].id" \
                         --output text)
-                        
+
             ORIGIN=${ROUTES_ORIGIN[$route]}
 
             if [ "$TYPE" = "cors" ]; then
