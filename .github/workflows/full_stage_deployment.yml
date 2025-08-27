@@ -30,7 +30,15 @@ jobs:
       - name: Set environment
         id: env
         run: |
-          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT  
+          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
+          COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
+          COGNITO_REDIRECT_URI: ${{ vars.COGNITO_REDIRECT_URI }}
+          ORIGIN: ${{ vars.ORIGIN }}
+          BOOK_KEY: ${{ vars.BOOK_KEY }}
+          EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
+          USER_POOL_ID: ${{ vars.USER_POOL_ID }}     
 
       - name: Deploy Lambdas if changed / new
         run: |
@@ -44,9 +52,8 @@ jobs:
           LAMBDA_RUNTIME["get_ebook_metadata"]="3.13"
 
           declare -A LAMBDA_ENV
-          LAMBDA_ENV["get_google_sign_in_url"]="ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }},COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }},COGNITO_DOMAIN=${{ vars.COGNITO_DOMAIN }},COGNITO_REDIRECT_URI=${{ vars.COGNITO_REDIRECT_URI }},ORIGINS=${{ vars.ORIGIN }}"
-
-          LAMBDA_ENV["get_ebook_metadata"]="BOOK_KEY=${{ vars.BOOK_KEY }},EBOOK_BUCKET=${{ vars.EBOOK_BUCKET }},ORIGIN=${{vars.ORIGIN}},USER_POOL_ID=${{vars.USER_POOL_ID}}"
+          LAMBDA_ENV["get_google_sign_in_url"]="ALLOWED_ORIGINS=$ALLOWED_ORIGINS,COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID,COGNITO_DOMAIN=$COGNITO_DOMAIN,COGNITO_REDIRECT_URI=$COGNITO_REDIRECT_URI,ORIGINS=$ORIGIN"
+          LAMBDA_ENV["get_ebook_metadata"]="BOOK_KEY=$BOOK_KEY,EBOOK_BUCKET=$EBOOK_BUCKET,ORIGIN=$ORIGIN,USER_POOL_ID=$USER_POOL_ID"
 
 
           for lambda in "${LAMBDAS[@]}"; do
