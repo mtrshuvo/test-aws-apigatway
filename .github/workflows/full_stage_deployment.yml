@@ -158,13 +158,7 @@ jobs:
             if [ "$TYPE" = "cors" ]; then
               echo "Updating OPTIONS CORS headers for $route"
               #Put method response (declare which headers your method will return)
-              aws apigateway put-method-response \
-                --rest-api-id $REST_API_ID \
-                --resource-id $RESOURCE_ID \
-                --http-method OPTIONS \
-                --status-code 200 \
-                --response-parameters '{"method.response.header.Access-Control-Allow-Origin": true, "method.response.header.Access-Control-Allow-Methods": true, "method.response.header.Access-Control-Allow-Headers": true}'
-
+              
               #Put integration response (map actual values to headers)
               aws apigateway put-integration-response \
                 --rest-api-id $REST_API_ID \
