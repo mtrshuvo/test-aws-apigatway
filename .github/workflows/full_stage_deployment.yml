@@ -37,6 +37,8 @@ jobs:
 
       - name: Deploy Lambdas if changed / new
         run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
           ENV=${{ steps.env.outputs.ENV }}
           LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")   # Add Lambda names as needed
 
