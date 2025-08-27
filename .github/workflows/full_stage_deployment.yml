@@ -75,7 +75,7 @@ jobs:
                   pip install -r $TMP_DIR/requirements.txt -t $TMP_DIR"
               fi
 
-              cd $TMP_DIR && zip -r ../../$lambda.zip . && cd -
+              cd $TMP_DIR && zip -r $GITHUB_WORKSPACE/$lambda.zip . && cd -
               rm -rf $TMP_DIR
 
               echo "Updating environment variables for $lambda"
