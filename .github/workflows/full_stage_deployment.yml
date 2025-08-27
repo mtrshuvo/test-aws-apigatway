@@ -99,9 +99,11 @@ jobs:
               rm -rf $TMP_DIR
 
               echo "Updating environment variables for $lambda"
+              echo "${LAMBDA_ENV[$lambda]}" > env.json
               aws lambda update-function-configuration \
                 --function-name $lambda \
-                --environment "Variables='${LAMBDA_ENV[$lambda]}'"
+                --environment file://env.json
+              rm env.json
 
               # Update Lambda code only
               aws lambda update-function-code \
