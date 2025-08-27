@@ -59,14 +59,14 @@ jobs:
             --arg domain "$COGNITO_DOMAIN" \
             --arg redirect "$COGNITO_REDIRECT_URI" \
             --arg origins "$ORIGIN" \
-            '{ALLOWED_ORIGINS: $allowed, COGNITO_CLIENT_ID: $client, COGNITO_DOMAIN: $domain, COGNITO_REDIRECT_URI: $redirect, ORIGINS: $origins}')
+            '{Variables: {ALLOWED_ORIGINS: $allowed, COGNITO_CLIENT_ID: $client, COGNITO_DOMAIN: $domain, COGNITO_REDIRECT_URI: $redirect, ORIGINS: $origins}}')
 
           LAMBDA_ENV["get_ebook_metadata"]=$(jq -n \
             --arg book "$BOOK_KEY" \
             --arg bucket "$EBOOK_BUCKET" \
             --arg origin "$ORIGIN" \
             --arg userpool "$USER_POOL_ID" \
-            '{BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}')
+            '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
 
 
           for lambda in "${LAMBDAS[@]}"; do
