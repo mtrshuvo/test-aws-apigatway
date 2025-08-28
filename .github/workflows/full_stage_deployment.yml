@@ -210,7 +210,6 @@ jobs:
                               --resource-id $RESOURCE_ID \
                               --http-method OPTIONS \
                               --status-code 200 \
-                              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"$ORIGIN\"}"
                               --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'$ORIGIN'\"}" \
 
                           ;;
