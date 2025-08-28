@@ -30,7 +30,7 @@ jobs:
       - name: Set environment
         id: env
         run: |
-          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT       
+          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
 
       - name: Deploy Lambdas if changed / new
         env:
@@ -42,16 +42,25 @@ jobs:
           EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
           ORIGIN: ${{ vars.ORIGIN }}
           USER_POOL_ID: ${{ vars.USER_POOL_ID }}
+          OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
-          ENV=${{ steps.env.outputs.ENV }}
-          LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")   # Add Lambda names as needed
 
-          declare -A LAMBDA_RUNTIME # Define runtimes for each Lambda
+          ENV=${{ steps.env.outputs.ENV }}
+
+          # API Gateway ID (replace if static, or make dynamic using aws cli)
+          REST_API_ID=1u8zyys7vb
+
+          # Lambdas to deploy
+          LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
+
+          # Lambda runtimes
+          declare -A LAMBDA_RUNTIME
           LAMBDA_RUNTIME["get_google_sign_in_url"]="3.13"
           LAMBDA_RUNTIME["get_ebook_metadata"]="3.13"
 
+          # Lambda environment variables
           declare -A LAMBDA_ENV
           LAMBDA_ENV["get_google_sign_in_url"]=$(jq -n \
             --arg allowed "$ALLOWED_ORIGINS" \
@@ -68,10 +77,21 @@ jobs:
             --arg userpool "$USER_POOL_ID" \
             '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
 
+          # API Gateway routes
+          declare -A ROUTES_METHODS
+          ROUTES_METHODS["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
+          ROUTES_METHODS["/signin_url"]="GET:lambda:get_google_sign_in_url"
 
+          DOMAIN=$OPTIONS_CORS_DOMAIN
+          declare -A ROUTES_ORIGIN
+          ROUTES_ORIGIN["/ebooks"]=$DOMAIN
+          ROUTES_ORIGIN["/signin_url"]=$DOMAIN
+
+          # Deploy each Lambda
           for lambda in "${LAMBDAS[@]}"; do
             HASH_FILE=".github/.${lambda}.hash"
-            echo "Processing $HASH_FILE ..."
+            echo "Processing $lambda..."
+
             if [ ! -d "$lambda" ]; then
               echo "Directory for $lambda not found, skipping"
               continue
@@ -83,56 +103,62 @@ jobs:
             if [ "$NEW_HASH" != "$OLD_HASH" ]; then
               echo "Updating $lambda..."
 
+              # Package Lambda
               PYTHON_VERSION=${LAMBDA_RUNTIME[$lambda]}
-              echo "Packaging $lambda with Python $PYTHON_VERSION"
-
               TMP_DIR=$(mktemp -d)
               cp -r $lambda/* $TMP_DIR/
 
               if [ -f "$TMP_DIR/requirements.txt" ]; then
-                echo "Installing dependencies for $lambda using Docker"
                 docker run --rm \
                   -v "$TMP_DIR":/var/task \
                   -w /var/task \
                   python:$PYTHON_VERSION \
                   bash -c "pip install -r requirements.txt -t ."
-                
                 sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
-
               fi
 
               cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
               rm -rf "$TMP_DIR"
 
-
-              echo "Updating environment variables for $lambda"
+              # Update environment variables
               echo "${LAMBDA_ENV[$lambda]}" > env.json
               aws lambda update-function-configuration \
                 --function-name $lambda \
                 --environment file://env.json
               rm env.json
 
-               # Wait for configuration update to complete
-              echo "Waiting for configuration update to complete..."
               aws lambda wait function-updated --function-name $lambda
 
-              # Update Lambda code only
+              # Update Lambda code
               aws lambda update-function-code \
                 --function-name $lambda \
                 --zip-file fileb://$lambda.zip \
                 --publish
 
-               # Wait for configuration update to complete
-              echo "Waiting for configuration update to complete..."
               aws lambda wait function-updated --function-name $lambda
 
               VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
-
               aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
+
+              # Add permissions dynamically for each route + method
+              for route in "${!ROUTES_METHODS[@]}"; do
+                METHODS=(${ROUTES_METHODS[$route]})
+                for method_entry in "${METHODS[@]}"; do
+                  IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
+                  if [[ "$TYPE" == "lambda" && "$LAMBDA_NAME" == "$lambda" ]]; then
+                    aws lambda add-permission \
+                      --function-name $lambda \
+                      --statement-id "${lambda}-${HTTP_METHOD}-${ENV}" \
+                      --action lambda:InvokeFunction \
+                      --principal apigateway.amazonaws.com \
+                      --source-arn "arn:aws:execute-api:ap-southeast-1:300080618312:$REST_API_ID/$ENV/$HTTP_METHOD$route/*" || echo "Permission may already exist"
+                  fi
+                done
+              done
 
               echo $NEW_HASH > $HASH_FILE
             else
-              echo "$lambda unchanged, skipping version publish"
+              echo "$lambda unchanged, skipping"
             fi
           done
 
@@ -140,107 +166,74 @@ jobs:
         run: |
           ENV=${{ steps.env.outputs.ENV }}
           REST_API_ID=1u8zyys7vb
-
-          # Define Lambda name mapping per route-method if needed
+          DOMAIN=${{ vars.OPTIONS_CORS_DOMAIN }}
 
           declare -A ROUTES_METHODS
-          
-          # format: "METHOD:type[:lambda_name]"
-          
           ROUTES_METHODS["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
           ROUTES_METHODS["/signin_url"]="GET:lambda:get_google_sign_in_url"
 
-          # Optional authorizers per route-method
           declare -A ROUTES_AUTHORIZE
-          # format: "METHOD:authorizer_name"
           ROUTES_AUTHORIZE["/ebooks"]="GET:teen_${ENV}_authorizer"
 
-          # Origins for CORS
-          DOMAIN=${{ vars.OPTIONS_CORS_DOMAIN }}
           declare -A ROUTES_ORIGIN
           ROUTES_ORIGIN["/ebooks"]=$DOMAIN
-          ROUTES_ORIGIN["/google_signin_urls"]=$DOMAIN
+          ROUTES_ORIGIN["/signin_url"]=$DOMAIN
 
           for route in "${!ROUTES_METHODS[@]}"; do
-              RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
-              METHODS=(${ROUTES_METHODS[$route]})
+            RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
+            METHODS=(${ROUTES_METHODS[$route]})
 
-              for method_entry in "${METHODS[@]}"; do
-                  # Split method_entry into METHOD:type:lambda_name
-                  IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
+            for method_entry in "${METHODS[@]}"; do
+              IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
 
-                  AUTHORIZE_ID=""
-                  if [[ -n "${ROUTES_AUTHORIZE[$route]}" ]]; then
-                      # Check if the authorizer matches this method
-                      if [[ "${ROUTES_AUTHORIZE[$route]}" == "$HTTP_METHOD:"* ]]; then
-                          AUTH_NAME="${ROUTES_AUTHORIZE[$route]#*:}"
-                          AUTHORIZE_ID=$(aws apigateway get-authorizers \
-                                          --rest-api-id $REST_API_ID \
-                                          --query "items[?name=='$AUTH_NAME'].id" \
-                                          --output text)
-                      fi
-                  fi
+              AUTHORIZE_ID=""
+              if [[ -n "${ROUTES_AUTHORIZE[$route]}" && "${ROUTES_AUTHORIZE[$route]}" == "$HTTP_METHOD:"* ]]; then
+                AUTH_NAME="${ROUTES_AUTHORIZE[$route]#*:}"
+                AUTHORIZE_ID=$(aws apigateway get-authorizers \
+                  --rest-api-id $REST_API_ID \
+                  --query "items[?name=='$AUTH_NAME'].id" \
+                  --output text)
+              fi
 
-                  ORIGIN="${ROUTES_ORIGIN[$route]:-$DOMAIN}"
+              ORIGIN="${ROUTES_ORIGIN[$route]:-$DOMAIN}"
 
-                  case "$TYPE" in
-                      lambda)
-                          # Build Lambda ARN with alias for environment
-                          LAMBDA_ARN="arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-southeast-1:300080618312:function:$LAMBDA_NAME:$ENV/invocations"
+              case "$TYPE" in
+                lambda)
+                  LAMBDA_ARN="arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-southeast-1:300080618312:function:$LAMBDA_NAME:$ENV/invocations"
+                  aws apigateway put-integration \
+                    --rest-api-id $REST_API_ID \
+                    --resource-id $RESOURCE_ID \
+                    --http-method $HTTP_METHOD \
+                    --type AWS_PROXY \
+                    --integration-http-method POST \
+                    --uri $LAMBDA_ARN
+                  ;;
+                cors)
+                  aws apigateway put-integration-response \
+                    --rest-api-id $REST_API_ID \
+                    --resource-id $RESOURCE_ID \
+                    --http-method OPTIONS \
+                    --status-code 200 \
+                    --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'$ORIGIN'\"}"
+                  ;;
+                *)
+                  echo "Skipping unsupported type $TYPE for $HTTP_METHOD $route"
+                  ;;
+              esac
 
-                          echo "Lambd arn with alias: $LAMBDA_ARN"
-
-                          echo "Setting integration for $HTTP_METHOD $route -> Lambda $LAMBDA_NAME"
-                          aws apigateway put-integration \
-                              --rest-api-id $REST_API_ID \
-                              --resource-id $RESOURCE_ID \
-                              --http-method $HTTP_METHOD \
-                              --type AWS_PROXY \
-                              --integration-http-method POST \
-                              --uri $LAMBDA_ARN
-
-                          ;;
-                      cors)
-                          echo "Configuring OPTIONS CORS for $route"
-                          # Method response
-                          # aws apigateway put-method-response \
-                          #     --rest-api-id $REST_API_ID \
-                          #     --resource-id $RESOURCE_ID \
-                          #     --http-method OPTIONS \
-                          #     --status-code 200 \
-                          #     --response-parameters "method.response.header.Access-Control-Allow-Origin=false,method.response.header.Access-Control-Allow-Methods=false,method.response.header.Access-Control-Allow-Headers=false" \
-                          #     --response-models '{"application/json": "Empty"}' || echo "OPTIONS method may already exist"
-
-                          # Integration response
-                          aws apigateway put-integration-response \
-                              --rest-api-id $REST_API_ID \
-                              --resource-id $RESOURCE_ID \
-                              --http-method OPTIONS \
-                              --status-code 200 \
-                              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'$ORIGIN'\"}" \
-
-                          ;;
-                      *)
-                          echo "Skipping unsupported type $TYPE for $HTTP_METHOD $route"
-                          ;;
-                  esac
-
-                  # Attach authorizer if exists
-                  if [[ -n "$AUTHORIZE_ID" && "$HTTP_METHOD" != "OPTIONS" ]]; then
-                      echo "Attaching authorizer $AUTHORIZE_ID to $HTTP_METHOD $route"
-                      aws apigateway update-method \
-                          --rest-api-id $REST_API_ID \
-                          --resource-id $RESOURCE_ID \
-                          --http-method $HTTP_METHOD \
-                          --patch-operations op=replace,path=/authorizationType,value=COGNITO_USER_POOLS \
-                                              op=replace,path=/authorizerId,value=$AUTHORIZE_ID
-                  fi
-              done
+              if [[ -n "$AUTHORIZE_ID" && "$HTTP_METHOD" != "OPTIONS" ]]; then
+                aws apigateway update-method \
+                  --rest-api-id $REST_API_ID \
+                  --resource-id $RESOURCE_ID \
+                  --http-method $HTTP_METHOD \
+                  --patch-operations op=replace,path=/authorizationType,value=COGNITO_USER_POOLS \
+                                      op=replace,path=/authorizerId,value=$AUTHORIZE_ID
+              fi
+            done
           done
 
           # Redeploy API Gateway stage
-          echo "Redeploying API Gateway stage $ENV"
           aws apigateway create-deployment \
-              --rest-api-id $REST_API_ID \
-              --stage-name $ENV \
-              --description "Updated all routes for $ENV"
+            --rest-api-id $REST_API_ID \
+            --stage-name $ENV \
+            --description "Updated all routes for $ENV"
