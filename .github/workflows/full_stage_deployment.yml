@@ -179,7 +179,7 @@ jobs:
                   case "$TYPE" in
                       lambda)
                           # Build Lambda ARN with alias for environment
-                          LAMBDA_ARN="arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-southeast-1:300080618312:function:$LAMBDA_NAME:$ENV"
+                          LAMBDA_ARN="arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-southeast-1:300080618312:function:$LAMBDA_NAME:$ENV/invocations"
 
                           echo "Lambd arn with alias: $LAMBDA_ARN"
 
