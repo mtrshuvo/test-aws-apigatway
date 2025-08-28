@@ -141,7 +141,7 @@ jobs:
           # format: "METHOD:type[:lambda_name]"
           
           ROUTES_METHODS["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
-          ROUTES_METHODS["/google_signin_urls"]="GET:lambda:get_google_sign_in_url OPTIONS:lambda:get_google_sign_in_url"
+          ROUTES_METHODS["/signin_urls"]="GET:lambda:get_google_sign_in_url OPTIONS:lambda:get_google_sign_in_url"
 
           # Optional authorizers per route-method
           declare -A ROUTES_AUTHORIZE
