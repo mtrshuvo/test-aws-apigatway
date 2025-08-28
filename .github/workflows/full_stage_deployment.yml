@@ -190,7 +190,7 @@ jobs:
                               --http-method $HTTP_METHOD \
                               --type AWS_PROXY \
                               --integration-http-method POST \
-                              --uri LAMBDA_ARN
+                              --uri $LAMBDA_ARN
 
                           ;;
                       cors)
