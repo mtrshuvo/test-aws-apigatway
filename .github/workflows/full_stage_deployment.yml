@@ -91,21 +91,16 @@ jobs:
 
               if [ -f "$TMP_DIR/requirements.txt" ]; then
                 echo "Installing dependencies for $lambda using Docker"
-                # docker run --rm -v $PWD:/app -w /app python:$PYTHON_VERSION bash -c "
-                #   pip install -r $TMP_DIR/requirements.txt -t $TMP_DIR"
                 docker run --rm \
-                -v "$PWD":/var/task \
-                -w /var/task \
-                python:${LAMBDA_RUNTIME[$lambda]} \
-                bash -c "
-                  pip install -r requirements.txt -t package && \
-                  cd package && zip -r ../function.zip . && \
-                  cd .. && zip -g function.zip lambda_function.py
-                "
+                  -v "$TMP_DIR":/var/task \
+                  -w /var/task \
+                  python:$PYTHON_VERSION \
+                  bash -c "pip install -r requirements.txt -t ."
               fi
 
-              cd $TMP_DIR && zip -r $GITHUB_WORKSPACE/$lambda.zip . && cd -
-              rm -rf $TMP_DIR
+              cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
+              rm -rf "$TMP_DIR"
+
 
               echo "Updating environment variables for $lambda"
               echo "${LAMBDA_ENV[$lambda]}" > env.json
