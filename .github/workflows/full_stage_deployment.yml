@@ -210,7 +210,7 @@ jobs:
                               --resource-id $RESOURCE_ID \
                               --http-method OPTIONS \
                               --status-code 200 \
-                              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"$ORIGIN\",\"method.response.header.Access-Control-Allow-Methods\":\"GET,POST,OPTIONS,PATCH,DELETE\",\"method.response.header.Access-Control-Allow-Headers\":\"Content-Type,Authorization,X-Requested-With\"}"
+                              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"$ORIGIN\"}"
                           ;;
                       *)
                           echo "Skipping unsupported type $TYPE for $HTTP_METHOD $route"
