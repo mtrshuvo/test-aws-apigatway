@@ -181,6 +181,8 @@ jobs:
                           # Build Lambda ARN with alias for environment
                           LAMBDA_ARN="arn:aws:lambda:$REGION:$ACCOUNT_ID:function:$LAMBDA_NAME:$ENV"
 
+                          echo "Lambd arn with alias: $LAMBDA_ARN"
+
                           echo "Setting integration for $HTTP_METHOD $route -> Lambda $LAMBDA_NAME"
                           aws apigateway put-integration \
                               --rest-api-id $REST_API_ID \
