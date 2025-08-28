@@ -96,6 +96,9 @@ jobs:
                   -w /var/task \
                   python:$PYTHON_VERSION \
                   bash -c "pip install -r requirements.txt -t ."
+                
+                sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
+
               fi
 
               cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
