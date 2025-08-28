@@ -196,13 +196,13 @@ jobs:
                       cors)
                           echo "Configuring OPTIONS CORS for $route"
                           # Method response
-                          aws apigateway put-method-response \
-                              --rest-api-id $REST_API_ID \
-                              --resource-id $RESOURCE_ID \
-                              --http-method OPTIONS \
-                              --status-code 200 \
-                              --response-parameters "method.response.header.Access-Control-Allow-Origin=false,method.response.header.Access-Control-Allow-Methods=false,method.response.header.Access-Control-Allow-Headers=false" \
-                              --response-models '{"application/json": "Empty"}' || echo "OPTIONS method may already exist"
+                          # aws apigateway put-method-response \
+                          #     --rest-api-id $REST_API_ID \
+                          #     --resource-id $RESOURCE_ID \
+                          #     --http-method OPTIONS \
+                          #     --status-code 200 \
+                          #     --response-parameters "method.response.header.Access-Control-Allow-Origin=false,method.response.header.Access-Control-Allow-Methods=false,method.response.header.Access-Control-Allow-Headers=false" \
+                          #     --response-models '{"application/json": "Empty"}' || echo "OPTIONS method may already exist"
 
                           # Integration response
                           aws apigateway put-integration-response \
