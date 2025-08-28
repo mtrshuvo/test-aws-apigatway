@@ -134,85 +134,103 @@ jobs:
           ENV=${{ steps.env.outputs.ENV }}
           REST_API_ID=1u8zyys7vb
 
-          # Define routes and types
-          declare -A ROUTES_TYPE
-          ROUTES_TYPE["/ebooks"]="cors"
-          ROUTES_TYPE["/google_signin_urls"]="cors"
+          # Define Lambda name mapping per route-method if needed
 
-          # Authorizers per route
+          declare -A ROUTES_METHODS
+          
+          # format: "METHOD:type[:lambda_name]"
+          
+          ROUTES_METHODS["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
+          ROUTES_METHODS["/google_signin_urls"]="GET:lambda:get_google_sign_in_url OPTIONS:lambda:get_google_sign_in_url"
+
+          # Optional authorizers per route-method
           declare -A ROUTES_AUTHORIZE
-          ROUTES_AUTHORIZE["/ebooks"]="teen_${ENV}_authorizer"
+          # format: "METHOD:authorizer_name"
+          ROUTES_AUTHORIZE["/ebooks"]="GET:teen_${ENV}_authorizer"
 
+          # Origins for CORS
           DOMAIN=${{ vars.OPTIONS_CORS_DOMAIN }}
-
           declare -A ROUTES_ORIGIN
           ROUTES_ORIGIN["/ebooks"]=$DOMAIN
-          ROUTES_ORIGIN["/pdf-url"]=$DOMAIN
+          ROUTES_ORIGIN["/google_signin_urls"]=$DOMAIN
 
-          for route in "${!ROUTES_TYPE[@]}"; do
-            RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
-            TYPE=${ROUTES_TYPE[$route]}
-            AUTHORIZE_ID=$(aws apigateway get-authorizers \
-                        --rest-api-id $REST_API_ID \
-                        --query "items[?name=='teen_${ENV}_authorizer'].id" \
-                        --output text)
+          for route in "${!ROUTES_METHODS[@]}"; do
+              RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
+              METHODS=(${ROUTES_METHODS[$route]})
 
-            ORIGIN=${ROUTES_ORIGIN[$route]}
+              for method_entry in "${METHODS[@]}"; do
+                  # Split method_entry into METHOD:type:lambda_name
+                  IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
 
-            if [ "$TYPE" = "cors" ]; then
-              echo "Updating OPTIONS CORS headers for $route"
+                  AUTHORIZE_ID=""
+                  if [[ -n "${ROUTES_AUTHORIZE[$route]}" ]]; then
+                      # Check if the authorizer matches this method
+                      if [[ "${ROUTES_AUTHORIZE[$route]}" == "$HTTP_METHOD:"* ]]; then
+                          AUTH_NAME="${ROUTES_AUTHORIZE[$route]#*:}"
+                          AUTHORIZE_ID=$(aws apigateway get-authorizers \
+                                          --rest-api-id $REST_API_ID \
+                                          --query "items[?name=='$AUTH_NAME'].id" \
+                                          --output text)
+                      fi
+                  fi
 
-              echo "Setting up method response headers for OPTIONS"
-              aws apigateway put-method-response \
-                --rest-api-id $REST_API_ID \
-                --resource-id $RESOURCE_ID \
-                --http-method OPTIONS \
-                --status-code 200 \
-                --response-parameters "method.response.header.Access-Control-Allow-Origin=false,method.response.header.Access-Control-Allow-Methods=false,method.response.header.Access-Control-Allow-Headers=false" \
-                --response-models '{"application/json": "Empty"}' || echo "Method response may already exist"
+                  ORIGIN="${ROUTES_ORIGIN[$route]:-$DOMAIN}"
 
-              # Then, put the integration response with the actual header values
-              echo "Setting up integration response headers for OPTIONS"
-              aws apigateway put-integration-response \
-                --rest-api-id $REST_API_ID \
-                --resource-id $RESOURCE_ID \
-                --http-method OPTIONS \
-                --status-code 200 \
-                --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'$ORIGIN'\",\"method.response.header.Access-Control-Allow-Methods\":\"'GET,OPTIONS'\",\"method.response.header.Access-Control-Allow-Headers\":\"'Content-Type,Authorization'\"}"
+                  case "$TYPE" in
+                      lambda)
+                          # Build Lambda ARN with alias for environment
+                          LAMBDA_ARN="arn:aws:lambda:$REGION:$ACCOUNT_ID:function:$LAMBDA_NAME:$ENV"
 
-            elif [ "$TYPE" = "integration" ]; then
-              echo "Updating integration response only for $route"
-              aws apigateway put-integration-response \
-                --rest-api-id $REST_API_ID \
-                --resource-id $RESOURCE_ID \
-                --http-method POST \
-                --status-code 200 \
-                --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"$ORIGIN\"}"
+                          echo "Setting integration for $HTTP_METHOD $route -> Lambda $LAMBDA_NAME"
+                          aws apigateway put-integration \
+                              --rest-api-id $REST_API_ID \
+                              --resource-id $RESOURCE_ID \
+                              --http-method $HTTP_METHOD \
+                              --type AWS_PROXY \
+                              --integration-http-method POST \
+                              --uri "arn:aws:apigateway:$REGION:lambda:path/2015-03-31/functions/$LAMBDA_ARN/invocations"
 
-            elif [ "$TYPE" = "lambda_options" ]; then
-              echo "OPTIONS handled by Lambda for $route, ensure integration points to $ENV alias"
-              aws apigateway update-integration \
-                --rest-api-id $REST_API_ID \
-                --resource-id $RESOURCE_ID \
-                --http-method OPTIONS \
-                --patch-operations op=replace,path=/uri,value="arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/arn:aws:lambda:<region>:<account-id>:function:$route:$ENV/invocations"
-            fi
+                          ;;
+                      cors)
+                          echo "Configuring OPTIONS CORS for $route"
+                          # Method response
+                          aws apigateway put-method-response \
+                              --rest-api-id $REST_API_ID \
+                              --resource-id $RESOURCE_ID \
+                              --http-method OPTIONS \
+                              --status-code 200 \
+                              --response-parameters "method.response.header.Access-Control-Allow-Origin=false,method.response.header.Access-Control-Allow-Methods=false,method.response.header.Access-Control-Allow-Headers=false" \
+                              --response-models '{"application/json": "Empty"}' || echo "OPTIONS method may already exist"
 
-            if [ -n "$AUTHORIZE_ID" ]; then
-              echo "Attaching authorizer for $route"
-              aws apigateway update-method \
-                --rest-api-id $REST_API_ID \
-                --resource-id $RESOURCE_ID \
-                --http-method GET \
-                --patch-operations op=replace,path=/authorizationType,value=COGNITO_USER_POOLS \
-                                    op=replace,path=/authorizerId,value=$AUTHORIZE_ID
-            fi
+                          # Integration response
+                          aws apigateway put-integration-response \
+                              --rest-api-id $REST_API_ID \
+                              --resource-id $RESOURCE_ID \
+                              --http-method OPTIONS \
+                              --status-code 200 \
+                              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"$ORIGIN\",\"method.response.header.Access-Control-Allow-Methods\":\"GET,POST,OPTIONS,PATCH,DELETE\",\"method.response.header.Access-Control-Allow-Headers\":\"Content-Type,Authorization,X-Requested-With\"}"
+                          ;;
+                      *)
+                          echo "Skipping unsupported type $TYPE for $HTTP_METHOD $route"
+                          ;;
+                  esac
+
+                  # Attach authorizer if exists
+                  if [[ -n "$AUTHORIZE_ID" && "$HTTP_METHOD" != "OPTIONS" ]]; then
+                      echo "Attaching authorizer $AUTHORIZE_ID to $HTTP_METHOD $route"
+                      aws apigateway update-method \
+                          --rest-api-id $REST_API_ID \
+                          --resource-id $RESOURCE_ID \
+                          --http-method $HTTP_METHOD \
+                          --patch-operations op=replace,path=/authorizationType,value=COGNITO_USER_POOLS \
+                                              op=replace,path=/authorizerId,value=$AUTHORIZE_ID
+                  fi
+              done
           done
 
-      - name: Redeploy API Gateway Stage
-        run: |
-          ENV=${{ steps.env.outputs.ENV }}
+          # Redeploy API Gateway stage
+          echo "Redeploying API Gateway stage $ENV"
           aws apigateway create-deployment \
-            --rest-api-id $REST_API_ID \
-            --stage-name $ENV \
-            --description "Updated all routes for $ENV"
+              --rest-api-id $REST_API_ID \
+              --stage-name $ENV \
+              --description "Updated all routes for $ENV"
