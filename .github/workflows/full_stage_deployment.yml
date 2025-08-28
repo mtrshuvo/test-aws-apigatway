@@ -211,6 +211,8 @@ jobs:
                               --http-method OPTIONS \
                               --status-code 200 \
                               --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"$ORIGIN\"}"
+                              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'$ORIGIN'\"}" \
+
                           ;;
                       *)
                           echo "Skipping unsupported type $TYPE for $HTTP_METHOD $route"
