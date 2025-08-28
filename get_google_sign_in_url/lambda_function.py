@@ -2,7 +2,7 @@ import os
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from lambda-request-response import error_response, status, success_response
+from lambda_response_utils import error_response, success_response, status
 
 ALLOWED_ORIGIN = os.environ['ORIGIN']
 
