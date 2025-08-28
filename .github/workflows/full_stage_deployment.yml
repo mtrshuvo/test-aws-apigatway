@@ -147,7 +147,7 @@ jobs:
                   IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
                   if [[ "$TYPE" == "lambda" && "$LAMBDA_NAME" == "$lambda" ]]; then
                     aws lambda add-permission \
-                      --function-name $lambda \
+                      --function-name $lambda:$ENV \
                       --statement-id "${lambda}-${HTTP_METHOD}-${ENV}" \
                       --action lambda:InvokeFunction \
                       --principal apigateway.amazonaws.com \
