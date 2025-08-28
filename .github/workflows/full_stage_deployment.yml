@@ -151,7 +151,8 @@ jobs:
                       --statement-id "${lambda}-${HTTP_METHOD}-${ENV}" \
                       --action lambda:InvokeFunction \
                       --principal apigateway.amazonaws.com \
-                      --source-arn "arn:aws:execute-api:ap-southeast-1:300080618312:$REST_API_ID/$ENV/$HTTP_METHOD$route/*" || echo "Permission may already exist"
+                      --source-arn "arn:aws:execute-api:ap-southeast-1:300080618312:$REST_API_ID/$ENV/$HTTP_METHOD$route/*" || echo "Permission may already exist" \
+                      --qualifier $ENV
                   fi
                 done
               done
