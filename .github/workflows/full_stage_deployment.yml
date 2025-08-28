@@ -190,7 +190,7 @@ jobs:
                               --http-method $HTTP_METHOD \
                               --type AWS_PROXY \
                               --integration-http-method POST \
-                              --uri "arn:aws:apigateway:$REGION:lambda:path/2015-03-31/functions/$LAMBDA_ARN/invocations"
+                              --uri LAMBDA_ARN
 
                           ;;
                       cors)
