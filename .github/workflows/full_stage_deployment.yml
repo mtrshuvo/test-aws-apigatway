@@ -47,5 +47,10 @@ jobs:
           bash .github/scripts/deploy_lambdas.sh
 
       - name: Update API Gateway routes
+        env:
+          ENV: ${{ github.event.inputs.environment }}
+          REST_API_ID: 1u8zyys7vb
+          REGION: ap-southeast-1
+          OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
           bash .github/scripts/update_routes.sh
