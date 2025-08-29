@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+#define lambda functions name
 LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
 declare -A RUNTIME=(
   ["get_google_sign_in_url"]="3.13"
