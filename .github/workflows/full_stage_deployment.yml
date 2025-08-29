@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
+    env:
+      REST_API_ID: 1u8zyys7vb
+      REGION: ap-southeast-1
+      ENV: ${{ github.event.inputs.environment }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,14 +30,9 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ap-southeast-1
+          aws-region: ${{ env.REGION }}
 
-      - name: Set environment
-        id: env
-        run: |
-          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-
-      - name: Deploy Lambdas if changed / new
+      - name: Deploy Lambdas
         env:
           ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
           COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
@@ -44,197 +44,8 @@ jobs:
           USER_POOL_ID: ${{ vars.USER_POOL_ID }}
           OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
-          #!/usr/bin/env bash
-          set -euo pipefail
+          bash .github/scripts/deploy_lambdas.sh
 
-          ENV=${{ steps.env.outputs.ENV }}
-
-          # API Gateway ID (replace if static, or make dynamic using aws cli)
-          REST_API_ID=1u8zyys7vb
-
-          # Lambdas to deploy
-          LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
-
-          # Lambda runtimes
-          declare -A LAMBDA_RUNTIME
-          LAMBDA_RUNTIME["get_google_sign_in_url"]="3.13"
-          LAMBDA_RUNTIME["get_ebook_metadata"]="3.13"
-
-          # Lambda environment variables
-          declare -A LAMBDA_ENV
-          LAMBDA_ENV["get_google_sign_in_url"]=$(jq -n \
-            --arg allowed "$ALLOWED_ORIGINS" \
-            --arg client "$COGNITO_CLIENT_ID" \
-            --arg domain "$COGNITO_DOMAIN" \
-            --arg redirect "$COGNITO_REDIRECT_URI" \
-            --arg origin "$ORIGIN" \
-            '{Variables: {ALLOWED_ORIGINS: $allowed, COGNITO_CLIENT_ID: $client, COGNITO_DOMAIN: $domain, COGNITO_REDIRECT_URI: $redirect, ORIGIN: $origin}}')
-
-          LAMBDA_ENV["get_ebook_metadata"]=$(jq -n \
-            --arg book "$BOOK_KEY" \
-            --arg bucket "$EBOOK_BUCKET" \
-            --arg origin "$ORIGIN" \
-            --arg userpool "$USER_POOL_ID" \
-            '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
-
-          # API Gateway routes
-          declare -A ROUTES_METHODS
-          ROUTES_METHODS["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
-          ROUTES_METHODS["/signin_url"]="GET:lambda:get_google_sign_in_url"
-
-          DOMAIN=$OPTIONS_CORS_DOMAIN
-          declare -A ROUTES_ORIGIN
-          ROUTES_ORIGIN["/ebooks"]=$DOMAIN
-          ROUTES_ORIGIN["/signin_url"]=$DOMAIN
-
-          # Deploy each Lambda
-          for lambda in "${LAMBDAS[@]}"; do
-            HASH_FILE=".github/.${lambda}.hash"
-            echo "Processing $lambda..."
-
-            if [ ! -d "$lambda" ]; then
-              echo "Directory for $lambda not found, skipping"
-              continue
-            fi
-
-            NEW_HASH=$(shasum -a 256 $lambda/* 2>/dev/null | shasum -a 256 | awk '{print $1}')
-            OLD_HASH=$(cat $HASH_FILE 2>/dev/null || echo "")
-
-            if [ "$NEW_HASH" != "$OLD_HASH" ]; then
-              echo "Updating $lambda..."
-
-              # Package Lambda
-              PYTHON_VERSION=${LAMBDA_RUNTIME[$lambda]}
-              TMP_DIR=$(mktemp -d)
-              cp -r $lambda/* $TMP_DIR/
-
-              if [ -f "$TMP_DIR/requirements.txt" ]; then
-                docker run --rm \
-                  -v "$TMP_DIR":/var/task \
-                  -w /var/task \
-                  python:$PYTHON_VERSION \
-                  bash -c "pip install -r requirements.txt -t ."
-                sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
-              fi
-
-              cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
-              rm -rf "$TMP_DIR"
-
-              # Update environment variables
-              echo "${LAMBDA_ENV[$lambda]}" > env.json
-              aws lambda update-function-configuration \
-                --function-name $lambda \
-                --environment file://env.json
-              rm env.json
-
-              aws lambda wait function-updated --function-name $lambda
-
-              # Update Lambda code
-              aws lambda update-function-code \
-                --function-name $lambda \
-                --zip-file fileb://$lambda.zip \
-                --publish
-
-              aws lambda wait function-updated --function-name $lambda
-
-              VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
-              aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
-
-              # Add permissions dynamically for each route + method
-              for route in "${!ROUTES_METHODS[@]}"; do
-                METHODS=(${ROUTES_METHODS[$route]})
-                for method_entry in "${METHODS[@]}"; do
-                  IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
-                  if [[ "$TYPE" == "lambda" && "$LAMBDA_NAME" == "$lambda" ]]; then
-                    aws lambda add-permission \
-                      --function-name $lambda:$ENV \
-                      --statement-id "${lambda}-${HTTP_METHOD}-${ENV}" \
-                      --action lambda:InvokeFunction \
-                      --principal apigateway.amazonaws.com \
-                      --source-arn "arn:aws:execute-api:ap-southeast-1:300080618312:$REST_API_ID/*/$HTTP_METHOD$route" || echo "Permission may already exist" \
-                      --qualifier $ENV
-                  fi
-                done
-              done
-
-              echo $NEW_HASH > $HASH_FILE
-            else
-              echo "$lambda unchanged, skipping"
-            fi
-          done
-
-      - name: Update API Gateway routes for environment
+      - name: Update API Gateway routes
         run: |
-          ENV=${{ steps.env.outputs.ENV }}
-          REST_API_ID=1u8zyys7vb
-          DOMAIN=${{ vars.OPTIONS_CORS_DOMAIN }}
-
-          declare -A ROUTES_METHODS
-          ROUTES_METHODS["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
-          ROUTES_METHODS["/signin_url"]="GET:lambda:get_google_sign_in_url"
-
-          declare -A ROUTES_AUTHORIZE
-          ROUTES_AUTHORIZE["/ebooks"]="GET:teen_${ENV}_authorizer"
-
-          declare -A ROUTES_ORIGIN
-          ROUTES_ORIGIN["/ebooks"]=$DOMAIN
-          ROUTES_ORIGIN["/signin_url"]=$DOMAIN
-
-          for route in "${!ROUTES_METHODS[@]}"; do
-            RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query "items[?path=='$route'].id" --output text)
-            METHODS=(${ROUTES_METHODS[$route]})
-
-            for method_entry in "${METHODS[@]}"; do
-              IFS=':' read -r HTTP_METHOD TYPE LAMBDA_NAME <<< "$method_entry"
-
-              AUTHORIZE_ID=""
-              if [[ -n "${ROUTES_AUTHORIZE[$route]}" && "${ROUTES_AUTHORIZE[$route]}" == "$HTTP_METHOD:"* ]]; then
-                AUTH_NAME="${ROUTES_AUTHORIZE[$route]#*:}"
-                AUTHORIZE_ID=$(aws apigateway get-authorizers \
-                  --rest-api-id $REST_API_ID \
-                  --query "items[?name=='$AUTH_NAME'].id" \
-                  --output text)
-              fi
-
-              ORIGIN="${ROUTES_ORIGIN[$route]:-$DOMAIN}"
-
-              case "$TYPE" in
-                lambda)
-                  LAMBDA_ARN="arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-southeast-1:300080618312:function:$LAMBDA_NAME:$ENV/invocations"
-                  aws apigateway put-integration \
-                    --rest-api-id $REST_API_ID \
-                    --resource-id $RESOURCE_ID \
-                    --http-method $HTTP_METHOD \
-                    --type AWS_PROXY \
-                    --integration-http-method POST \
-                    --uri $LAMBDA_ARN
-                  ;;
-                cors)
-                  aws apigateway put-integration-response \
-                    --rest-api-id $REST_API_ID \
-                    --resource-id $RESOURCE_ID \
-                    --http-method OPTIONS \
-                    --status-code 200 \
-                    --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'$ORIGIN'\"}"
-                  ;;
-                *)
-                  echo "Skipping unsupported type $TYPE for $HTTP_METHOD $route"
-                  ;;
-              esac
-
-              if [[ -n "$AUTHORIZE_ID" && "$HTTP_METHOD" != "OPTIONS" ]]; then
-                aws apigateway update-method \
-                  --rest-api-id $REST_API_ID \
-                  --resource-id $RESOURCE_ID \
-                  --http-method $HTTP_METHOD \
-                  --patch-operations op=replace,path=/authorizationType,value=COGNITO_USER_POOLS \
-                                      op=replace,path=/authorizerId,value=$AUTHORIZE_ID
-              fi
-            done
-          done
-
-          # Redeploy API Gateway stage
-          aws apigateway create-deployment \
-            --rest-api-id $REST_API_ID \
-            --stage-name $ENV \
-            --description "Updated all routes for $ENV"
+          bash .github/scripts/update_routes.sh
