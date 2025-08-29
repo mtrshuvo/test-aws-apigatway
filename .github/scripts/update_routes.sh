@@ -3,7 +3,7 @@ set -euo pipefail
 
 declare -A ROUTES_METHODS=(
   ["/ebooks"]="GET:lambda:get_ebook_metadata OPTIONS:cors"
-  ["/signin_url"]="GET:lambda:get_google_sign_in_url"
+  ["/signin_url"]="GET:lambda:get_google_sign_in_url OPTIONS:lambda:get_google_sign_in_url"
 )
 
 declare -A ROUTES_AUTHORIZE=(
