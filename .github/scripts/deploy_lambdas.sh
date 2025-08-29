@@ -49,11 +49,17 @@ for lambda in "${LAMBDAS[@]}"; do
   rm -rf "$TMP_DIR"
 
   echo "${ENV_VARS[$lambda]}" > env.json
+  
   aws lambda update-function-configuration --function-name $lambda --environment file://env.json
+  
   rm env.json
+  
   aws lambda wait function-updated --function-name $lambda
 
   aws lambda update-function-code --function-name $lambda --zip-file fileb://$lambda.zip --publish
+  
+  aws lambda wait function-updated --function-name $lambda
+
   VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
   aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
 
