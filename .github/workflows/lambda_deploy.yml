@@ -57,35 +57,119 @@ jobs:
         id: changed
         run: |
           echo "Detecting changed Lambda folders..."
-
-          BEFORE=${GITHUB_EVENT_BEFORE:-}
-
-          if [[ -z "$BEFORE" ]] || [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
-            echo "First commit on branch, taking all Lambda folders..."
-            CHANGED=$(find . -maxdepth 1 -mindepth 1 -type d -not -name ".git" -not -name ".github" | xargs -n1 basename)
+          
+          # Get the previous commit SHA
+          if [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]] || [[ -z "${{ github.event.before }}" ]]; then
+            # First commit on branch or force push - compare with HEAD~1
+            if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+              BEFORE_SHA="HEAD~1"
+            else
+              # Very first commit in repo - deploy all lambda folders
+              echo "First commit in repository, finding all lambda folders..."
+              CHANGED_FOLDERS=$(find . -maxdepth 1 -mindepth 1 -type d \
+                -not -name ".git" \
+                -not -name ".github" \
+                -not -name "node_modules" \
+                -not -name ".vscode" \
+                -not -name "dist" \
+                -not -name "build" \
+                | sed 's|^\./||' | tr '\n' ' ')
+              echo "All lambda folders: $CHANGED_FOLDERS"
+              echo "CHANGED_LAMBDAS=$CHANGED_FOLDERS" >> $GITHUB_ENV
+              exit 0
+            fi
           else
-            CHANGED=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" \
-              | grep -E '^[^/]+/' | cut -d'/' -f1 | sort -u || true)
+            BEFORE_SHA="${{ github.event.before }}"
           fi
-
-          if [[ -z "$CHANGED" ]]; then
-            echo "No Lambda changes detected."
+          
+          echo "Comparing $BEFORE_SHA with ${{ github.sha }}"
+          
+          # Get changed files and extract top-level folders
+          CHANGED_FILES=$(git diff --name-only "$BEFORE_SHA" "${{ github.sha }}" || true)
+          
+          if [[ -z "$CHANGED_FILES" ]]; then
+            echo "No files changed."
+            echo "CHANGED_LAMBDAS=" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Extract unique top-level folders from changed files
+          CHANGED_FOLDERS=$(echo "$CHANGED_FILES" | \
+            grep -E '^[^/]+/' | \
+            cut -d'/' -f1 | \
+            sort -u | \
+            tr '\n' ' ')
+          
+          # Filter out non-lambda folders (common non-lambda directories)
+          FILTERED_FOLDERS=""
+          for folder in $CHANGED_FOLDERS; do
+            if [[ "$folder" != ".github" ]] && \
+               [[ "$folder" != ".git" ]] && \
+               [[ "$folder" != "docs" ]] && \
+               [[ "$folder" != "scripts" ]] && \
+               [[ "$folder" != "node_modules" ]] && \
+               [[ "$folder" != ".vscode" ]] && \
+               [[ "$folder" != "dist" ]] && \
+               [[ "$folder" != "build" ]] && \
+               [[ -d "$folder" ]]; then
+              FILTERED_FOLDERS="$FILTERED_FOLDERS $folder"
+            fi
+          done
+          
+          # Trim whitespace
+          FILTERED_FOLDERS=$(echo $FILTERED_FOLDERS | xargs)
+          
+          if [[ -z "$FILTERED_FOLDERS" ]]; then
+            echo "No Lambda folder changes detected."
             echo "CHANGED_LAMBDAS=" >> $GITHUB_ENV
           else
-            echo "Changed Lambdas: $CHANGED"
-            echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
+            echo "Changed Lambda folders: $FILTERED_FOLDERS"
+            echo "CHANGED_LAMBDAS=$FILTERED_FOLDERS" >> $GITHUB_ENV
           fi
 
       # Deploy changed Lambdas
       - name: Deploy changed Lambdas
         if: env.CHANGED_LAMBDAS != ''
         run: |
-          IFS=' ' read -ra LAMBDAS <<< "${CHANGED_LAMBDAS}"
+          echo "Deploying changed lambdas: $CHANGED_LAMBDAS"
+          
+          # Convert space-separated string to array
+          IFS=' ' read -ra LAMBDAS <<< "$CHANGED_LAMBDAS"
+          
+          # Deploy each changed lambda
           for lambda in "${LAMBDAS[@]}"; do
-            echo "Deploying $lambda..."
-            bash .github/scripts/deploy_lambdas.sh select "$lambda"
+            if [[ -n "$lambda" ]]; then
+              echo "Deploying lambda: $lambda"
+              
+              # Check if the lambda folder exists and has necessary files
+              if [[ -d "$lambda" ]]; then
+                echo "Found lambda folder: $lambda"
+                
+                # You can add additional checks here like:
+                # - Check for package.json, requirements.txt, or other lambda files
+                # - Validate lambda structure before deployment
+                
+                # Call your deployment script
+                if [[ -f ".github/scripts/deploy_lambdas.sh" ]]; then
+                  bash .github/scripts/deploy_lambdas.sh select "$lambda"
+                else
+                  echo "Warning: Deployment script not found at .github/scripts/deploy_lambdas.sh"
+                fi
+              else
+                echo "Warning: Lambda folder '$lambda' not found, skipping..."
+              fi
+            fi
+          done
 
-      # No changes
+      # No changes detected
       - name: No changes
         if: env.CHANGED_LAMBDAS == ''
-        run: echo "No Lambda changes detected, skipping deployment."
+        run: |
+          echo "No Lambda folder changes detected, skipping deployment."
+          echo "This could mean:"
+          echo "- Only non-lambda files were changed (docs, .github, etc.)"
+          echo "- No files were changed in this push"
+          echo "- Changed files are in non-existent directories"
