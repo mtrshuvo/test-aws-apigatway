@@ -36,7 +36,7 @@ def lambda_handler(event, context):
             "redirect_uri": redirect_uri,
             "scope": "openid email profile",
             "prompt": prompt,
-            "login_hint": login_hint
+            "login_hints": login_hint
         }
 
 
