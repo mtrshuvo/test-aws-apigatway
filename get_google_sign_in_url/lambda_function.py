@@ -10,7 +10,7 @@ def lambda_handler(event, context):
     base_header = {
             "Access-Control-Allow-Origin": ALLOWED_ORIGIN
         }
-
+    
     try:
         headers = event.get("headers", {})
         print(f"headers:{headers}")
