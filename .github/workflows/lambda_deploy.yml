@@ -10,6 +10,7 @@ on:
 jobs:
   deploy-lambdas:
     runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
 
     env:
       REGION: ap-southeast-1
@@ -34,14 +35,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.REGION }}
-
-      - name: Determine ENV
-        id: set-env
-        run: |
-          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            echo "ENV=prod" >> $GITHUB_ENV
-          else
-            echo "ENV=staging" >> $GITHUB_ENV
 
       - name: Detect changed Lambda folders
         id: changed
