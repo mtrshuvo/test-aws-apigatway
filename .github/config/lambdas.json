@@ -29,7 +29,7 @@
     },
     "/signin_url": {
       "methods": {
-        "GET": {"type": "lambda", "lambda_name": "get_google_sign_in_url"}
+        "GET": {"type": "lambda", "lambda_name": "get_google_sign_in_url","authorizer": "teen_${ENV}_authorizer"}
       }
     }
   }
