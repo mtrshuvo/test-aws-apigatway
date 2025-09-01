@@ -43,7 +43,7 @@ jobs:
 
       - name: Deploy Lambdas
         run: |
-          bash .github/scripts/deploy_lambdas.sh
+          bash .github/scripts/deploy_lambdas.sh select get_google_sign_in_url
 
       - name: Update API Gateway routes
         run: |
