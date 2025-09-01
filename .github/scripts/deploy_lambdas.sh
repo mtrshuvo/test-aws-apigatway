@@ -156,5 +156,4 @@ for lambda in "${TARGETS[@]}"; do
   VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
   aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
 
-  echo $NEW_HASH > $HASH_FILE
 done
