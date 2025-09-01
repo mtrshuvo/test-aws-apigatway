@@ -70,6 +70,16 @@ for route in $(jq -r '.routes | keys[]' "$CONFIG_FILE"); do
       lambda)
         LAMBDA_NAME=$(jq -r ".routes[\"$route\"].methods[\"$method\"].lambda_name" "$CONFIG_FILE")
         LAMBDA_ARN="arn:aws:apigateway:$REGION:lambda:path/2015-03-31/functions/arn:aws:lambda:$REGION:300080618312:function:$LAMBDA_NAME:$ENV/invocations"
+        
+
+        aws lambda add-permission \
+          --function-name "$LAMBDA_NAME" \
+          --statement-id "apigateway-$ENV-$route-$method" \
+          --action lambda:InvokeFunction \
+          --principal apigateway.amazonaws.com \
+          --source-arn "arn:aws:execute-api:$REGION:300080618312:$REST_API_ID/*/$method$route" || true
+          
+        
         aws apigateway put-integration \
           --rest-api-id $REST_API_ID \
           --resource-id $RESOURCE_ID \
