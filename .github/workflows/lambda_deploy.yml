@@ -1,22 +1,19 @@
-name: Auto Lambda Deploy on Folder Change
+name: Lambda Folder Change Deployment
 
 on:
   push:
     branches:
       - main
-      - staging
-    paths:
-      - 'test-aws-apigatway/**'  # watch only changes in lambdas folder
-      - '.github/config/lambdas.json'
+      - 'staging*'
+      - 'feature/*'
 
 jobs:
-  auto-deploy:
+  deploy-lambdas:
     runs-on: ubuntu-latest
 
     env:
-      REST_API_ID: 1u8zyys7vb
       REGION: ap-southeast-1
-      ENV: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
+      REST_API_ID: 1u8zyys7vb
       ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
       COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
       COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
@@ -31,31 +28,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.REGION }}
 
-      - name: Get changed Lambda folders
-        id: changes
+      - name: Determine ENV
+        id: set-env
         run: |
-          echo "Checking changed Lambda folders..."
-          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^lambdas/' | cut -d/ -f2 | sort | uniq)
-          echo "Changed Lambdas: $CHANGED"
-          echo "changed_lambdas=$CHANGED" >> $GITHUB_OUTPUT
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "ENV=prod" >> $GITHUB_ENV
+          else
+            echo "ENV=staging" >> $GITHUB_ENV
 
-      - name: Deploy updated Lambdas
-        if: steps.changes.outputs.changed_lambdas != ''
+      - name: Detect changed Lambda folders
+        id: changed
         run: |
-          for lambda in ${{ steps.changes.outputs.changed_lambdas }}; do
-            echo "Deploying $lambda for $ENV..."
+          echo "Detecting changed Lambda folders..."
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
+          if [[ -z "$CHANGED" ]]; then
+            echo "No Lambda changes detected."
+            echo "CHANGED_LAMBDAS=" >> $GITHUB_ENV
+          else
+            echo "Changed lambdas: $CHANGED"
+            echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
+
+      - name: Deploy changed Lambdas
+        if: env.CHANGED_LAMBDAS != ''
+        run: |
+          IFS=' ' read -ra LAMBDAS <<< "${CHANGED_LAMBDAS}"
+          for lambda in "${LAMBDAS[@]}"; do
+            echo "Deploying $lambda..."
             bash .github/scripts/deploy_lambdas.sh select "$lambda"
-          done
-
-      - name: Update API Gateway routes
-        if: steps.changes.outputs.changed_lambdas != ''
-        run: |
-          echo "Updating API Gateway routes for $ENV..."
-          bash .github/scripts/update_routes.sh
