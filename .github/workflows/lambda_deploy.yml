@@ -68,10 +68,7 @@ jobs:
               CHANGED_FOLDERS=$(find . -maxdepth 1 -mindepth 1 -type d \
                 -not -name ".git" \
                 -not -name ".github" \
-                -not -name "node_modules" \
                 -not -name ".vscode" \
-                -not -name "dist" \
-                -not -name "build" \
                 | sed 's|^\./||' | tr '\n' ' ')
               echo "All lambda folders: $CHANGED_FOLDERS"
               echo "CHANGED_LAMBDAS=$CHANGED_FOLDERS" >> $GITHUB_ENV
