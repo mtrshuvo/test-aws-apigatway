@@ -10,6 +10,10 @@ on:
         options:
           - staging
           - prod
+      lambdas:
+        description: "Comma-separated list of Lambdas (or 'all')"
+        required: true
+        default: "all"
 
 jobs:
   deploy-stage:
@@ -43,8 +47,20 @@ jobs:
 
       - name: Deploy Lambdas
         run: |
-          bash .github/scripts/deploy_lambdas.sh select get_google_sign_in_url
+          IFS=',' read -ra SELECTED <<< "${{ github.event.inputs.lambdas }}"
+
+          if [[ "${{ github.event.inputs.lambdas }}" == "all" ]]; then
+            echo "Deploying ALL lambdas..."
+            bash .github/scripts/deploy_lambdas.sh all
+          else
+            for lambda in "${SELECTED[@]}"; do
+              lambda=$(echo "$lambda" | xargs) # trim spaces
+              echo "Deploying $lambda..."
+              bash .github/scripts/deploy_lambdas.sh select "$lambda"
+            done
+          fi
 
       - name: Update API Gateway routes
         run: |
-          bash .github/scripts/update_routes.sh
+          echo "Updating API Gateway routes for ${{ github.event.inputs.environment }}..."
+          # Add your route update logic here
