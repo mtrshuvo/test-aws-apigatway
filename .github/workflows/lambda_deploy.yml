@@ -16,7 +16,6 @@ jobs:
     # General environment variables (common for both prod & staging)
     env:
       REGION: ap-southeast-1
-      REST_API_ID: 1u8zyys7vb
       ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
       COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
       COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
