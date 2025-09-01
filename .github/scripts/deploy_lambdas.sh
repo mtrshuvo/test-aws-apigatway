@@ -132,7 +132,7 @@ for lambda in "${TARGETS[@]}"; do
   rm -rf "$TMP_DIR"
 
   # Build env JSON from config
-  jq -n "$(jq -r ".lambdas[\"$lambda\"].env" "$CONFIG_FILE")" > env.json
+jq -n '{"Variables": '"$(jq -r ".lambdas[\"$lambda\"].env" "$CONFIG_FILE")"'}' > env.json
   aws lambda update-function-configuration --function-name "$lambda" --environment file://env.json
   rm env.json
   aws lambda wait function-updated --function-name "$lambda"
