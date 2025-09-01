@@ -63,10 +63,10 @@ jobs:
 
           if [[ -z "$BEFORE" ]] || [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
             echo "First commit on branch, taking all Lambda folders..."
-            CHANGED=$(find lambdas -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
+            CHANGED=$(find test-aws-apigatway -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
           else
             CHANGED=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" \
-              | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
+              | grep '^test-aws-apigatway/' | cut -d'/' -f2 | sort -u || true)
           fi
 
           if [[ -z "$CHANGED" ]]; then
