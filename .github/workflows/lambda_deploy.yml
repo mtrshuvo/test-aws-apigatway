@@ -10,33 +10,25 @@ jobs:
   deploy-lambdas:
     runs-on: ubuntu-latest
 
-    # Environment variables will be populated dynamically in a step
+    # GitHub environment selection
+    environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
+
     env:
       REGION: ap-southeast-1
+      REST_API_ID: 1u8zyys7vb
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
+      COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
+      COGNITO_REDIRECT_URI: ${{ vars.COGNITO_REDIRECT_URI }}
+      BOOK_KEY: ${{ vars.BOOK_KEY }}
+      EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
+      ORIGIN: ${{ vars.ORIGIN }}
+      USER_POOL_ID: ${{ vars.USER_POOL_ID }}
+      OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set environment and load variables
-        run: |
-          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            ENV="prod"
-          else
-            ENV="staging"
-          fi
-          echo "ENV=$ENV" >> $GITHUB_ENV
-
-          # Map environment variables to GitHub secrets or vars for the selected ENV
-          echo "ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}" >> $GITHUB_ENV
-          echo "COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }}" >> $GITHUB_ENV
-          echo "COGNITO_DOMAIN=${{ vars.COGNITO_DOMAIN }}" >> $GITHUB_ENV
-          echo "COGNITO_REDIRECT_URI=${{ vars.COGNITO_REDIRECT_URI }}" >> $GITHUB_ENV
-          echo "BOOK_KEY=${{ vars.BOOK_KEY }}" >> $GITHUB_ENV
-          echo "EBOOK_BUCKET=${{ vars.EBOOK_BUCKET }}" >> $GITHUB_ENV
-          echo "ORIGIN=${{ vars.ORIGIN }}" >> $GITHUB_ENV
-          echo "USER_POOL_ID=${{ vars.USER_POOL_ID }}" >> $GITHUB_ENV
-          echo "OPTIONS_CORS_DOMAIN=${{ vars.OPTIONS_CORS_DOMAIN }}" >> $GITHUB_ENV
 
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v2
@@ -48,7 +40,8 @@ jobs:
       - name: Detect changed Lambda folders
         id: changed
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
+            | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
           echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
 
       - name: Deploy changed Lambdas
@@ -58,3 +51,7 @@ jobs:
           for lambda in "${LAMBDAS[@]}"; do
             echo "Deploying $lambda..."
             bash .github/scripts/deploy_lambdas.sh select "$lambda"
+
+      - name: No changes
+        if: env.CHANGED_LAMBDAS == ''
+        run: echo "No Lambda
