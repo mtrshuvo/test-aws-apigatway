@@ -75,7 +75,7 @@ for route in $(jq -r '.routes | keys[]' "$CONFIG_FILE"); do
         STATEMENT_ID="apigateway-$ENV-$SAFE_ROUTE-$method"
 
         aws lambda add-permission \
-          --function-name "$LAMBDA_NAME" \
+          --function-name "$LAMBDA_NAME:$ENV" \
           --statement-id "$STATEMENT_ID" \
           --action lambda:InvokeFunction \
           --principal apigateway.amazonaws.com \
