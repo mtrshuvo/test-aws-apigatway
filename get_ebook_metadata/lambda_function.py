@@ -44,10 +44,6 @@ def lambda_handler(event, context):
                 details= "User name not found"
             )
         # user_info = get_cognito_info(cognito_username) [future implementation]
-
-
-        #check the transaction id  [future implemention]
-
         data = obj["Body"].read()
         metadata = json.loads(data)
         return success_response(
