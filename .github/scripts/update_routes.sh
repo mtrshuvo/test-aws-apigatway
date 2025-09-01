@@ -99,6 +99,8 @@ for route in $(jq -r '.routes | keys[]' "$CONFIG_FILE"); do
 
         # If authorizer is defined, attach Cognito authorizer
         if [[ -n "$AUTHORIZE_NAME" && "$method" != "OPTIONS" ]]; then
+          AUTHORIZE_NAME=${AUTHORIZE_NAME//\$\{ENV\}/$ENV}
+
           AUTHORIZE_ID=$(aws apigateway get-authorizers \
             --rest-api-id $REST_API_ID \
             --query "items[?name=='$AUTHORIZE_NAME'].id" \
