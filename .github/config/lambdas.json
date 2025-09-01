@@ -30,7 +30,6 @@
     "/signin_url": {
       "methods": {
         "GET": {"type": "lambda", "lambda_name": "get_google_sign_in_url"},
-        "OPTIONS": {"type": "lambda", "lambda_name": "get_google_sign_in_url"}
       }
     }
   }
