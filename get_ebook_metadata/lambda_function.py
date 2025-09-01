@@ -11,7 +11,6 @@ BUCKET = os.environ["EBOOK_BUCKET"]
 ALLOWED_ORIGIN = os.environ['ORIGIN']
 BOOK_KEY = os.environ['BOOK_KEY']
 
-
 def get_cognito_info(user_name):
     return cognito_client.admin_get_user(
     UserPoolId=USER_POOL_ID,
