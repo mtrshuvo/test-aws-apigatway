@@ -44,7 +44,7 @@ jobs:
           USER_POOL_ID: ${{ vars.USER_POOL_ID }}
           OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
-          bash .github/scripts/deploy_lambdas.sh
+          bash .github/scripts/deploy_lambdas.sh select get_ebook_metadata
 
       - name: Update API Gateway routes
         env:
