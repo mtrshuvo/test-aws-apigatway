@@ -43,7 +43,7 @@ jobs:
 
       - name: Deploy Lambdas
         run: |
-          bash .github/scripts/deploy_lambdas.sh auto
+          bash .github/scripts/deploy_lambdas.sh
 
       - name: Update API Gateway routes
         run: |
