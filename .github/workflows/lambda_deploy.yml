@@ -6,7 +6,7 @@ on:
       - main
       - staging
     paths:
-      - 'lambdas/**'  # watch only changes in lambdas folder
+      - 'test-aws-apigatway/**'  # watch only changes in lambdas folder
       - '.github/config/lambdas.json'
 
 jobs:
