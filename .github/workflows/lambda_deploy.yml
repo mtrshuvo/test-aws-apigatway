@@ -41,15 +41,23 @@ jobs:
         id: changed
         run: |
           echo "Detecting changed Lambda folders..."
-          # Compare last commit with previous commit
-          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
-            | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
+          
+          # Handle first commit case
+          if [[ "${GITHUB_EVENT_BEFORE}" == "0000000000000000000000000000000000000000" ]]; then
+            echo "First commit on branch, taking all Lambda folders..."
+            CHANGED=$(find lambdas -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
+          else
+            CHANGED=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_SHA \
+              | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
+          fi
+
           if [[ -z "$CHANGED" ]]; then
             echo "No Lambda changes detected."
             echo "CHANGED_LAMBDAS=" >> $GITHUB_ENV
           else
             echo "Changed Lambdas: $CHANGED"
             echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
+
 
       - name: Deploy changed Lambdas
         if: env.CHANGED_LAMBDAS != ''
