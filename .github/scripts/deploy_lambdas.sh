@@ -172,29 +172,19 @@
 
 
 
-
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ==============================
-# Usage:
-#   ./deploy_lambdas.sh auto
-#   ./deploy_lambdas.sh force
-#   ./deploy_lambdas.sh select get_google_sign_in_url get_ebook_metadata
-# ==============================
+# Usage: ./deploy_lambdas.sh MODE
+MODE="${1:-auto}"  # auto, force, or select
+shift || true
 
-MODE="${1:-auto}"  # default mode is auto
-shift || true      # shift args so $@ contains function names in select mode
-
-# Define lambda functions
 LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
-
 declare -A RUNTIME=(
   ["get_google_sign_in_url"]="3.13"
   ["get_ebook_metadata"]="3.13"
 )
 
-# Lambda environment variables
 declare -A ENV_VARS
 ENV_VARS["get_google_sign_in_url"]=$(jq -n \
   --arg allowed "$ALLOWED_ORIGINS" \
@@ -211,21 +201,21 @@ ENV_VARS["get_ebook_metadata"]=$(jq -n \
   --arg userpool "$USER_POOL_ID" \
   '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
 
-# Determine which lambdas to deploy
 TARGETS=()
 
+# Determine which functions to deploy
 if [[ "$MODE" == "force" ]]; then
   TARGETS=("${LAMBDAS[@]}")
 elif [[ "$MODE" == "auto" ]]; then
-  # detect changed lambda folders using git
-  CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
   for lambda in "${LAMBDAS[@]}"; do
-    for file in $CHANGED_FILES; do
-      if [[ $file == $lambda/* ]]; then
-        TARGETS+=("$lambda")
-        break
-      fi
-    done
+    # Check if folder changed compared to default branch (e.g., main)
+    if git fetch origin main >/dev/null 2>&1; then
+      CHANGED=$(git diff --name-only origin/main HEAD -- "$lambda/")
+      [[ -n "$CHANGED" ]] && TARGETS+=("$lambda") || echo "$lambda unchanged, skipping"
+    else
+      echo "Git fetch failed, deploying $lambda anyway"
+      TARGETS+=("$lambda")
+    fi
   done
 elif [[ "$MODE" == "select" ]]; then
   if [[ $# -eq 0 ]]; then
@@ -238,44 +228,29 @@ else
   exit 1
 fi
 
-if [[ ${#TARGETS[@]} -eq 0 ]]; then
-  echo "No lambda functions to deploy in mode $MODE."
-  exit 0
-fi
-
-# Deploy loop
+# Deploy each function
 for lambda in "${TARGETS[@]}"; do
-  echo "Deploying $lambda (mode=$MODE)..."
-
-  [[ ! -d "$lambda" ]] && echo "No directory for $lambda, skipping" && continue
-
+  echo "Deploying $lambda..."
   TMP_DIR=$(mktemp -d)
-  cp -r $lambda/* "$TMP_DIR"
+  cp -r "$lambda"/* "$TMP_DIR"
 
-  # Install requirements if exist
   if [[ -f "$TMP_DIR/requirements.txt" ]]; then
     docker run --rm -v "$TMP_DIR":/var/task -w /var/task python:${RUNTIME[$lambda]} \
       bash -c "pip install -r requirements.txt -t ."
     sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
   fi
 
-  # Zip package
   cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
   rm -rf "$TMP_DIR"
 
-  # Update env
   echo "${ENV_VARS[$lambda]}" > env.json
   aws lambda update-function-configuration --function-name $lambda --environment file://env.json
   rm env.json
   aws lambda wait function-updated --function-name $lambda
 
-  # Update code
   aws lambda update-function-code --function-name $lambda --zip-file fileb://$lambda.zip --publish
   aws lambda wait function-updated --function-name $lambda
 
-  # Publish version and update alias
   VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
   aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
 done
-
-echo "Deployment completed for mode $MODE."
