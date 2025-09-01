@@ -37,7 +37,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.REGION }}
 
-            - name: Detect changed Lambda folders
+      - name: Detect changed Lambda folders
         id: changed
         run: |
           echo "Detecting changed Lambda folders..."
