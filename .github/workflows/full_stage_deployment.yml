@@ -11,7 +11,11 @@ on:
           - staging
           - prod
       lambdas:
-        description: "Comma-separated list of Lambdas (or 'all')"
+        description: |
+          Comma-separated list of Lambdas to deploy (or 'all')  
+          Available options:  
+          - get_google_sign_in_url  
+          - get_ebook_metadata
         required: true
         default: "all"
 
