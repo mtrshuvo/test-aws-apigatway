@@ -1,0 +1,37 @@
+{
+  "lambdas": {
+    "get_google_sign_in_url": {
+      "runtime": "3.13",
+      "env": {
+        "ALLOWED_ORIGINS": "${ALLOWED_ORIGINS}",
+        "COGNITO_CLIENT_ID": "${COGNITO_CLIENT_ID}",
+        "COGNITO_DOMAIN": "${COGNITO_DOMAIN}",
+        "COGNITO_REDIRECT_URI": "${COGNITO_REDIRECT_URI}",
+        "ORIGIN": "${ORIGIN}"
+      }
+    },
+    "get_ebook_metadata": {
+      "runtime": "3.13",
+      "env": {
+        "BOOK_KEY": "${BOOK_KEY}",
+        "EBOOK_BUCKET": "${EBOOK_BUCKET}",
+        "ORIGIN": "${ORIGIN}",
+        "USER_POOL_ID": "${USER_POOL_ID}"
+      }
+    }
+  },
+  "routes": {
+    "/ebooks": {
+      "methods": {
+        "GET": {"type": "lambda", "lambda_name": "get_ebook_metadata", "authorizer": "teen_${ENV}_authorizer"},
+        "OPTIONS": {"type": "cors", "origin": "${OPTIONS_CORS_DOMAIN}"}
+      }
+    },
+    "/signin_url": {
+      "methods": {
+        "GET": {"type": "lambda", "lambda_name": "get_google_sign_in_url"},
+        "OPTIONS": {"type": "lambda", "lambda_name": "get_google_sign_in_url"}
+      }
+    }
+  }
+}
