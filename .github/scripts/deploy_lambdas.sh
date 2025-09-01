@@ -173,54 +173,114 @@
 
 
 
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================
+# Usage:
+#   ./deploy_lambdas.sh auto
+#   ./deploy_lambdas.sh force
+#   ./deploy_lambdas.sh select get_google_sign_in_url get_ebook_metadata
+# ==============================
+
+MODE="${1:-auto}"  # default is auto
+shift || true      # remaining args are for select mode
+
+# ------------------------------
+# Lambda configuration
+# ------------------------------
+LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
+
+declare -A RUNTIME=(
+  ["get_google_sign_in_url"]="3.13"
+  ["get_ebook_metadata"]="3.13"
+)
+
+declare -A ENV_VARS
+ENV_VARS["get_google_sign_in_url"]=$(jq -n \
+  --arg allowed "$ALLOWED_ORIGINS" \
+  --arg client "$COGNITO_CLIENT_ID" \
+  --arg domain "$COGNITO_DOMAIN" \
+  --arg redirect "$COGNITO_REDIRECT_URI" \
+  --arg origin "$ORIGIN" \
+  '{Variables: {ALLOWED_ORIGINS: $allowed, COGNITO_CLIENT_ID: $client, COGNITO_DOMAIN: $domain, COGNITO_REDIRECT_URI: $redirect, ORIGIN: $origin}}')
+
+ENV_VARS["get_ebook_metadata"]=$(jq -n \
+  --arg book "$BOOK_KEY" \
+  --arg bucket "$EBOOK_BUCKET" \
+  --arg origin "$ORIGIN" \
+  --arg userpool "$USER_POOL_ID" \
+  '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
+
+# ------------------------------
+# Determine which functions to deploy
+# ------------------------------
+TARGETS=()
+
+case "$MODE" in
+  force)
+    TARGETS=("${LAMBDAS[@]}")
+    ;;
+  auto)
+    # Only functions whose hash differs
+    for lambda in "${LAMBDAS[@]}"; do
+      [[ ! -d "$lambda" ]] && continue
+      NEW_HASH=$(shasum -a 256 $lambda/* 2>/dev/null | shasum -a 256 | awk '{print $1}')
+      OLD_HASH=$(cat ".github/.${lambda}.hash" 2>/dev/null || echo "")
+      [[ "$NEW_HASH" != "$OLD_HASH" ]] && TARGETS+=("$lambda")
+    done
+    ;;
+  select)
+    if [[ $# -eq 0 ]]; then
+      echo "ERROR: Provide function names in select mode!"
+      exit 1
+    fi
+    TARGETS=("$@")
+    ;;
+  *)
+    echo "Unknown mode: $MODE"
+    exit 1
+    ;;
+esac
+
+[[ ${#TARGETS[@]} -eq 0 ]] && echo "Nothing to deploy, exiting." && exit 0
+
+# ------------------------------
 # Deploy loop
+# ------------------------------
 for lambda in "${TARGETS[@]}"; do
+  echo "Deploying $lambda (mode=$MODE)..."
   HASH_FILE=".github/.${lambda}.hash"
-  echo "Processing $lambda (mode=$MODE)..."
 
-  [[ ! -d "$lambda" ]] && echo "No dir for $lambda, skipping" && continue
-
-  echo "Packaging $lambda..."
   TMP_DIR=$(mktemp -d)
-  cp -r "$lambda"/* "$TMP_DIR"
+  cp -r $lambda/* "$TMP_DIR"
 
-  # If Python deps exist, install them into the package
   if [[ -f "$TMP_DIR/requirements.txt" ]]; then
     docker run --rm -v "$TMP_DIR":/var/task -w /var/task python:${RUNTIME[$lambda]} \
       bash -c "pip install -r requirements.txt -t ."
-    sudo chown -R "$(id -u)":"$(id -g)" "$TMP_DIR"
+    sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
   fi
 
-  # Create deterministic zip (no timestamps, no extra attrs)
-  ZIP_PATH="$GITHUB_WORKSPACE/$lambda.zip"
-  cd "$TMP_DIR"
-  zip -X -r "$ZIP_PATH" . > /dev/null
-  cd - >/dev/null
+  cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
   rm -rf "$TMP_DIR"
 
-  # Compute hash of the zip
-  NEW_HASH=$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')
-  OLD_HASH=$(cat "$HASH_FILE" 2>/dev/null || echo "")
+  echo "${ENV_VARS[$lambda]}" > env.json
+  aws lambda update-function-configuration --function-name $lambda --environment file://env.json
+  rm env.json
+  aws lambda wait function-updated --function-name $lambda
 
-  # Auto mode: skip unchanged
-  if [[ "$MODE" == "auto" && "$NEW_HASH" == "$OLD_HASH" ]]; then
-    echo "$lambda unchanged, skipping"
-    continue
+  aws lambda update-function-code --function-name $lambda --zip-file fileb://$lambda.zip --publish
+  aws lambda wait function-updated --function-name $lambda
+
+  VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
+  aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
+
+  # Save hash only in auto mode
+  if [[ "$MODE" == "auto" ]]; then
+    NEW_HASH=$(shasum -a 256 $lambda/* 2>/dev/null | shasum -a 256 | awk '{print $1}')
+    echo $NEW_HASH > $HASH_FILE
   fi
 
-  echo "Deploying $lambda..."
-  echo "${ENV_VARS[$lambda]}" > env.json
-  
-  aws lambda update-function-configuration --function-name "$lambda" --environment file://env.json
-  rm env.json
-  aws lambda wait function-updated --function-name "$lambda"
-
-  aws lambda update-function-code --function-name "$lambda" --zip-file fileb://"$ZIP_PATH" --publish
-  aws lambda wait function-updated --function-name "$lambda"
-
-  VERSION=$(aws lambda publish-version --function-name "$lambda" --query Version --output text)
-  aws lambda update-alias --function-name "$lambda" --name "$ENV" --function-version "$VERSION"
-
-  # Save hash for next auto run
-  echo "$NEW_HASH" > "$HASH_FILE"
+  echo "$lambda deployed with version $VERSION"
 done
