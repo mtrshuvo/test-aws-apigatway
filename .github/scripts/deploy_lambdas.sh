@@ -173,7 +173,6 @@
 
 
 
-
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -184,12 +183,10 @@ set -euo pipefail
 #   ./deploy_lambdas.sh select get_google_sign_in_url get_ebook_metadata
 # ==============================
 
-MODE="${1:-auto}"  # default is auto
-shift || true      # remaining args are for select mode
+MODE="${1:-auto}"  # default mode is auto
+shift || true      # shift args so $@ contains function names in select mode
 
-# ------------------------------
-# Lambda configuration
-# ------------------------------
+# Define lambda functions
 LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
 
 declare -A RUNTIME=(
@@ -197,6 +194,7 @@ declare -A RUNTIME=(
   ["get_ebook_metadata"]="3.13"
 )
 
+# Lambda environment variables
 declare -A ENV_VARS
 ENV_VARS["get_google_sign_in_url"]=$(jq -n \
   --arg allowed "$ALLOWED_ORIGINS" \
@@ -213,74 +211,72 @@ ENV_VARS["get_ebook_metadata"]=$(jq -n \
   --arg userpool "$USER_POOL_ID" \
   '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
 
-# ------------------------------
-# Determine which functions to deploy
-# ------------------------------
+# Determine which lambdas to deploy
 TARGETS=()
 
-case "$MODE" in
-  force)
-    TARGETS=("${LAMBDAS[@]}")
-    ;;
-  auto)
-    # Only functions whose hash differs
-    for lambda in "${LAMBDAS[@]}"; do
-      [[ ! -d "$lambda" ]] && continue
-      NEW_HASH=$(shasum -a 256 $lambda/* 2>/dev/null | shasum -a 256 | awk '{print $1}')
-      OLD_HASH=$(cat ".github/.${lambda}.hash" 2>/dev/null || echo "")
-      [[ "$NEW_HASH" != "$OLD_HASH" ]] && TARGETS+=("$lambda")
+if [[ "$MODE" == "force" ]]; then
+  TARGETS=("${LAMBDAS[@]}")
+elif [[ "$MODE" == "auto" ]]; then
+  # detect changed lambda folders using git
+  CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+  for lambda in "${LAMBDAS[@]}"; do
+    for file in $CHANGED_FILES; do
+      if [[ $file == $lambda/* ]]; then
+        TARGETS+=("$lambda")
+        break
+      fi
     done
-    ;;
-  select)
-    if [[ $# -eq 0 ]]; then
-      echo "ERROR: Provide function names in select mode!"
-      exit 1
-    fi
-    TARGETS=("$@")
-    ;;
-  *)
-    echo "Unknown mode: $MODE"
+  done
+elif [[ "$MODE" == "select" ]]; then
+  if [[ $# -eq 0 ]]; then
+    echo "ERROR: In select mode, provide function names!"
     exit 1
-    ;;
-esac
+  fi
+  TARGETS=("$@")
+else
+  echo "Unknown mode: $MODE"
+  exit 1
+fi
 
-[[ ${#TARGETS[@]} -eq 0 ]] && echo "Nothing to deploy, exiting." && exit 0
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "No lambda functions to deploy in mode $MODE."
+  exit 0
+fi
 
-# ------------------------------
 # Deploy loop
-# ------------------------------
 for lambda in "${TARGETS[@]}"; do
   echo "Deploying $lambda (mode=$MODE)..."
-  HASH_FILE=".github/.${lambda}.hash"
+
+  [[ ! -d "$lambda" ]] && echo "No directory for $lambda, skipping" && continue
 
   TMP_DIR=$(mktemp -d)
   cp -r $lambda/* "$TMP_DIR"
 
+  # Install requirements if exist
   if [[ -f "$TMP_DIR/requirements.txt" ]]; then
     docker run --rm -v "$TMP_DIR":/var/task -w /var/task python:${RUNTIME[$lambda]} \
       bash -c "pip install -r requirements.txt -t ."
     sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
   fi
 
+  # Zip package
   cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
   rm -rf "$TMP_DIR"
 
+  # Update env
   echo "${ENV_VARS[$lambda]}" > env.json
   aws lambda update-function-configuration --function-name $lambda --environment file://env.json
   rm env.json
   aws lambda wait function-updated --function-name $lambda
 
+  # Update code
   aws lambda update-function-code --function-name $lambda --zip-file fileb://$lambda.zip --publish
   aws lambda wait function-updated --function-name $lambda
 
+  # Publish version and update alias
   VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
   aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
-
-  # Save hash only in auto mode
-  if [[ "$MODE" == "auto" ]]; then
-    NEW_HASH=$(shasum -a 256 $lambda/* 2>/dev/null | shasum -a 256 | awk '{print $1}')
-    echo $NEW_HASH > $HASH_FILE
-  fi
-
-  echo "$lambda deployed with version $VERSION"
 done
+
+echo "Deployment completed for mode $MODE."
+
