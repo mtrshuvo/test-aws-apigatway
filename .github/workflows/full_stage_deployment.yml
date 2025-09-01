@@ -39,6 +39,9 @@ jobs:
       OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Show available lambdas
         run: |
           echo "Available Lambdas from config:"
@@ -60,8 +63,6 @@ jobs:
             done
           fi
           echo "All specified lambdas are valid."
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v2
