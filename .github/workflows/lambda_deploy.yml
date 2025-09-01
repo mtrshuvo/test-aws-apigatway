@@ -10,9 +10,10 @@ jobs:
   deploy-lambdas:
     runs-on: ubuntu-latest
 
-    # GitHub environment selection
+    # Select environment for GitHub environment secrets (optional)
     environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
 
+    # General environment variables (common for both prod & staging)
     env:
       REGION: ap-southeast-1
       REST_API_ID: 1u8zyys7vb
@@ -27,9 +28,23 @@ jobs:
       OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
 
     steps:
+      # Full checkout (needed for git diff)
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # Set environment variable based on branch
+      - name: Determine environment
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "ENV=prod" >> $GITHUB_ENV
+          else
+            echo "ENV=staging" >> $GITHUB_ENV
+          fi
+          echo "Selected environment: $ENV"
+
+      # Configure AWS credentials (same secrets for both environments)
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -37,19 +52,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.REGION }}
 
+      # Detect changed Lambda folders
       - name: Detect changed Lambda folders
         id: changed
         run: |
           echo "Detecting changed Lambda folders..."
           
-          # Handle first commit case
+          # Handle first commit on branch
           if [[ "${GITHUB_EVENT_BEFORE}" == "0000000000000000000000000000000000000000" ]]; then
             echo "First commit on branch, taking all Lambda folders..."
             CHANGED=$(find lambdas -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
           else
-            CHANGED=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_SHA \
+            CHANGED=$(git diff --name-only "$GITHUB_EVENT_BEFORE" "$GITHUB_SHA" \
               | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
-          fi  # <-- this fi was missing
+          fi
 
           if [[ -z "$CHANGED" ]]; then
             echo "No Lambda changes detected."
@@ -57,10 +73,8 @@ jobs:
           else
             echo "Changed Lambdas: $CHANGED"
             echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
-          fi  # <-- add fi for this if
 
-
-
+      # Deploy changed Lambdas
       - name: Deploy changed Lambdas
         if: env.CHANGED_LAMBDAS != ''
         run: |
@@ -69,6 +83,7 @@ jobs:
             echo "Deploying $lambda..."
             bash .github/scripts/deploy_lambdas.sh select "$lambda"
 
+      # No changes
       - name: No changes
         if: env.CHANGED_LAMBDAS == ''
         run: echo "No Lambda changes detected, skipping deployment."

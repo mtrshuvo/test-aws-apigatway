@@ -36,9 +36,8 @@ def lambda_handler(event, context):
             "redirect_uri": redirect_uri,
             "scope": "openid email profile",
             "prompt": prompt,
-            "login_hints": login_hint
+            "login_hint": login_hint
         }
-
 
         encoded_query = urllib.parse.urlencode(query_params)
         url = f"{cognito_domain}/oauth2/authorize?{encoded_query}"
