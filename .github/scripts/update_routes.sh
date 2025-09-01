@@ -81,6 +81,8 @@ for route in $(jq -r '.routes | keys[]' "$CONFIG_FILE"); do
   for method in $METHODS; do
     TYPE=$(jq -r ".routes[\"$route\"].methods[\"$method\"].type" "$CONFIG_FILE")
     AUTHORIZE_NAME=$(jq -r ".routes[\"$route\"].methods[\"$method\"].authorizer // empty" "$CONFIG_FILE")
+
+    echo "Configuring $method $route (type=$TYPE, authorizer=$AUTHORIZE_NAME)..."
     
     case "$TYPE" in
       lambda)
