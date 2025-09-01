@@ -279,4 +279,3 @@ for lambda in "${TARGETS[@]}"; do
 done
 
 echo "Deployment completed for mode $MODE."
-
