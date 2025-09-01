@@ -80,7 +80,7 @@ set -euo pipefail
 #   ./deploy.sh select get_google_sign_in_url get_ebook_metadata
 # ==============================
 
-MODE="${1:-auto}"  # default is auto
+MODE="${1:-force}"  # default is force
 shift || true      # shift args so $@ contains function names in select mode
 
 # Define lambda functions name

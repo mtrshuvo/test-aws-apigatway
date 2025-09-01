@@ -49,7 +49,7 @@ jobs:
           USER_POOL_ID: ${{ vars.USER_POOL_ID }}
           OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
-          bash .github/scripts/deploy_lambdas.sh select get_google_sign_in_url
+          bash .github/scripts/deploy_lambdas.sh
 
       - name: Update API Gateway routes
         env:
