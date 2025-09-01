@@ -39,6 +39,7 @@ def lambda_handler(event, context):
             "login_hint": login_hint
         }
 
+
         encoded_query = urllib.parse.urlencode(query_params)
         url = f"{cognito_domain}/oauth2/authorize?{encoded_query}"
 
