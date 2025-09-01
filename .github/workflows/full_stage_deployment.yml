@@ -34,7 +34,6 @@ jobs:
 
 # ==============================
 # Usage:
-#   ./deploy.sh auto it will check if there is any change in the lambda code, if yes, it will deploy the lambdas
 #   ./deploy.sh force it will deploy all the lambdas regardless of any change
 #   ./deploy.sh select get_google_sign_in_url [other_lambda_names] it will deploy only the selected lambdas 
 # ==============================

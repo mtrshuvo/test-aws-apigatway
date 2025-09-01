@@ -71,117 +71,90 @@
 
 
 
-# #!/usr/bin/env bash
-# set -euo pipefail
+#!/usr/bin/env bash
+set -euo pipefail
 
-# # ==============================
-# # Usage:
-# #   ./deploy.sh auto
-# #   ./deploy.sh force
-# #   ./deploy.sh select get_google_sign_in_url get_ebook_metadata
-# # ==============================
+# ==============================
+# Usage:
+#   ./deploy.sh force
+#   ./deploy.sh select get_google_sign_in_url get_ebook_metadata
+# ==============================
 
-# MODE="${1:-auto}"  # default is auto
-# shift || true      # shift args so $@ contains function names in select mode
+MODE="${1:-auto}"  # default is auto
+shift || true      # shift args so $@ contains function names in select mode
 
-# # Define lambda functions name
-# LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
+# Define lambda functions name
+LAMBDAS=("get_google_sign_in_url" "get_ebook_metadata")
 
-# declare -A RUNTIME=(
-#   ["get_google_sign_in_url"]="3.13"
-#   ["get_ebook_metadata"]="3.13"
-# )
+declare -A RUNTIME=(
+  ["get_google_sign_in_url"]="3.13"
+  ["get_ebook_metadata"]="3.13"
+)
 
-# # Lambda environments
-# declare -A ENV_VARS
-# ENV_VARS["get_google_sign_in_url"]=$(jq -n \
-#   --arg allowed "$ALLOWED_ORIGINS" \
-#   --arg client "$COGNITO_CLIENT_ID" \
-#   --arg domain "$COGNITO_DOMAIN" \
-#   --arg redirect "$COGNITO_REDIRECT_URI" \
-#   --arg origin "$ORIGIN" \
-#   '{Variables: {ALLOWED_ORIGINS: $allowed, COGNITO_CLIENT_ID: $client, COGNITO_DOMAIN: $domain, COGNITO_REDIRECT_URI: $redirect, ORIGIN: $origin}}')
+# Lambda environments
+declare -A ENV_VARS
+ENV_VARS["get_google_sign_in_url"]=$(jq -n \
+  --arg allowed "$ALLOWED_ORIGINS" \
+  --arg client "$COGNITO_CLIENT_ID" \
+  --arg domain "$COGNITO_DOMAIN" \
+  --arg redirect "$COGNITO_REDIRECT_URI" \
+  --arg origin "$ORIGIN" \
+  '{Variables: {ALLOWED_ORIGINS: $allowed, COGNITO_CLIENT_ID: $client, COGNITO_DOMAIN: $domain, COGNITO_REDIRECT_URI: $redirect, ORIGIN: $origin}}')
 
-# ENV_VARS["get_ebook_metadata"]=$(jq -n \
-#   --arg book "$BOOK_KEY" \
-#   --arg bucket "$EBOOK_BUCKET" \
-#   --arg origin "$ORIGIN" \
-#   --arg userpool "$USER_POOL_ID" \
-#   '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
+ENV_VARS["get_ebook_metadata"]=$(jq -n \
+  --arg book "$BOOK_KEY" \
+  --arg bucket "$EBOOK_BUCKET" \
+  --arg origin "$ORIGIN" \
+  --arg userpool "$USER_POOL_ID" \
+  '{Variables: {BOOK_KEY: $book, EBOOK_BUCKET: $bucket, ORIGIN: $origin, USER_POOL_ID: $userpool}}')
 
-# # Functions to process
-# TARGETS=()
+# Functions to process
+TARGETS=()
 
-# if [[ "$MODE" == "force" ]]; then
-#   TARGETS=("${LAMBDAS[@]}")
-# elif [[ "$MODE" == "auto" ]]; then
-#   TARGETS=("${LAMBDAS[@]}")
-# elif [[ "$MODE" == "select" ]]; then
-#   if [[ $# -eq 0 ]]; then
-#     echo "ERROR: In select mode, provide function names!"
-#     exit 1
-#   fi
-#   TARGETS=("$@")
-# else
-#   echo "Unknown mode: $MODE"
-#   exit 1
-# fi
+if [[ "$MODE" == "force" ]]; then
+  TARGETS=("${LAMBDAS[@]}")
 
-# # Deploy loop
-# for lambda in "${TARGETS[@]}"; do
-#   HASH_FILE=".github/.${lambda}.hash"
-#   echo "Processing $lambda (mode=$MODE)..."
+elif [[ "$MODE" == "select" ]]; then
+  if [[ $# -eq 0 ]]; then
+    echo "ERROR: In select mode, provide function names!"
+    exit 1
+  fi
+  TARGETS=("$@")
+else
+  echo "Unknown mode: $MODE"
+  exit 1
+fi
 
-#   [[ ! -d "$lambda" ]] && echo "No dir for $lambda, skipping" && continue
+# Deploy loop
+for lambda in "${TARGETS[@]}"; do
+  HASH_FILE=".github/.${lambda}.hash"
+  echo "Processing $lambda (mode=$MODE)..."
 
-#   NEW_HASH=$(shasum -a 256 $lambda/* 2>/dev/null | shasum -a 256 | awk '{print $1}')
-#   OLD_HASH=$(cat $HASH_FILE 2>/dev/null || echo "")
 
-#   if [[ "$MODE" == "auto" && "$NEW_HASH" == "$OLD_HASH" ]]; then
-#     echo "$lambda unchanged, skipping"
-#     continue
-#   fi
+  echo "Deploying $lambda..."
+  TMP_DIR=$(mktemp -d)
+  cp -r $lambda/* "$TMP_DIR"
 
-#   echo "Deploying $lambda..."
-#   TMP_DIR=$(mktemp -d)
-#   cp -r $lambda/* "$TMP_DIR"
+  if [[ -f "$TMP_DIR/requirements.txt" ]]; then
+    docker run --rm -v "$TMP_DIR":/var/task -w /var/task python:${RUNTIME[$lambda]} \
+      bash -c "pip install -r requirements.txt -t ."
+    sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
+  fi
 
-#   if [[ -f "$TMP_DIR/requirements.txt" ]]; then
-#     docker run --rm -v "$TMP_DIR":/var/task -w /var/task python:${RUNTIME[$lambda]} \
-#       bash -c "pip install -r requirements.txt -t ."
-#     sudo chown -R $(id -u):$(id -g) "$TMP_DIR"
-#   fi
+  cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
+  rm -rf "$TMP_DIR"
 
-#   cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
-#   rm -rf "$TMP_DIR"
-
-#   echo "${ENV_VARS[$lambda]}" > env.json
+  echo "${ENV_VARS[$lambda]}" > env.json
   
-#   aws lambda update-function-configuration --function-name $lambda --environment file://env.json
-#   rm env.json
-#   aws lambda wait function-updated --function-name $lambda
+  aws lambda update-function-configuration --function-name $lambda --environment file://env.json
+  rm env.json
+  aws lambda wait function-updated --function-name $lambda
 
-#   aws lambda update-function-code --function-name $lambda --zip-file fileb://$lambda.zip --publish
-#   aws lambda wait function-updated --function-name $lambda
+  aws lambda update-function-code --function-name $lambda --zip-file fileb://$lambda.zip --publish
+  aws lambda wait function-updated --function-name $lambda
 
-#   VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
-#   aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
+  VERSION=$(aws lambda publish-version --function-name $lambda --query Version --output text)
+  aws lambda update-alias --function-name $lambda --name $ENV --function-version $VERSION
 
-#   echo $NEW_HASH > $HASH_FILE
-# done
-
-
-elif [[ "$MODE" == "auto" ]]; then
-  # Ensure main branch exists locally for comparison
-  git fetch origin main:refs/remotes/origin/main >/dev/null 2>&1 || true
-
-  for lambda in "${LAMBDAS[@]}"; do
-    CHANGED=$(git diff --name-only origin/main HEAD -- "$lambda/")
-    if [[ -n "$CHANGED" ]]; then
-      echo "$lambda changed, adding to deploy"
-      TARGETS+=("$lambda")
-    else
-      echo "$lambda unchanged, skipping"
-    fi
-  done
-
+  echo $NEW_HASH > $HASH_FILE
+done
