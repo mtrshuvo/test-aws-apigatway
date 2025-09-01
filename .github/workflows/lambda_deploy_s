@@ -1,0 +1,61 @@
+name: Auto Lambda Deploy on Folder Change
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - 'lambdas/**'  # watch only changes in lambdas folder
+      - '.github/config/lambdas.json'
+
+jobs:
+  auto-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      REST_API_ID: 1u8zyys7vb
+      REGION: ap-southeast-1
+      ENV: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
+      COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
+      COGNITO_REDIRECT_URI: ${{ vars.COGNITO_REDIRECT_URI }}
+      BOOK_KEY: ${{ vars.BOOK_KEY }}
+      EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
+      ORIGIN: ${{ vars.ORIGIN }}
+      USER_POOL_ID: ${{ vars.USER_POOL_ID }}
+      OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ env.REGION }}
+
+      - name: Get changed Lambda folders
+        id: changes
+        run: |
+          echo "Checking changed Lambda folders..."
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^lambdas/' | cut -d/ -f2 | sort | uniq)
+          echo "Changed Lambdas: $CHANGED"
+          echo "changed_lambdas=$CHANGED" >> $GITHUB_OUTPUT
+
+      - name: Deploy updated Lambdas
+        if: steps.changes.outputs.changed_lambdas != ''
+        run: |
+          for lambda in ${{ steps.changes.outputs.changed_lambdas }}; do
+            echo "Deploying $lambda for $ENV..."
+            bash .github/scripts/deploy_lambdas.sh select "$lambda"
+          done
+
+      - name: Update API Gateway routes
+        if: steps.changes.outputs.changed_lambdas != ''
+        run: |
+          echo "Updating API Gateway routes for $ENV..."
+          bash .github/scripts/update_routes.sh
