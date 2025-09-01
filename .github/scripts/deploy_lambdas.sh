@@ -86,7 +86,6 @@
 
 
 
-
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -94,10 +93,10 @@ CONFIG_FILE=".github/config/lambdas.json"
 MODE="${1:-force}"
 shift || true
 
-# Load Lambda names from JSON
+# Load Lambda names
 LAMBDAS=($(jq -r '.lambdas | keys[]' "$CONFIG_FILE"))
 
-# Select targets based on mode
+# Determine targets
 TARGETS=()
 if [[ "$MODE" == "force" ]]; then
   TARGETS=("${LAMBDAS[@]}")
@@ -112,9 +111,8 @@ else
   exit 1
 fi
 
-# Deploy Lambdas
+# Deploy loop
 for lambda in "${TARGETS[@]}"; do
-  HASH_FILE=".github/.${lambda}.hash"
   echo "Processing $lambda (mode=$MODE)..."
 
   TMP_DIR=$(mktemp -d)
@@ -131,8 +129,10 @@ for lambda in "${TARGETS[@]}"; do
   cd "$TMP_DIR" && zip -r "$GITHUB_WORKSPACE/$lambda.zip" . && cd -
   rm -rf "$TMP_DIR"
 
-  # Build env JSON from config
-jq -n '{"Variables": '"$(jq -r ".lambdas[\"$lambda\"].env" "$CONFIG_FILE")"'}' > env.json
+  # Interpolate env vars dynamically
+  ENV_JSON=$(jq -r ".lambdas[\"$lambda\"].env" "$CONFIG_FILE" | envsubst)
+  jq -n --argjson vars "$ENV_JSON" '{"Variables": $vars}' > env.json
+
   aws lambda update-function-configuration --function-name "$lambda" --environment file://env.json
   rm env.json
   aws lambda wait function-updated --function-name "$lambda"

@@ -20,6 +20,15 @@ jobs:
       REST_API_ID: 1u8zyys7vb
       REGION: ap-southeast-1
       ENV: ${{ github.event.inputs.environment }}
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
+      COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
+      COGNITO_REDIRECT_URI: ${{ vars.COGNITO_REDIRECT_URI }}
+      BOOK_KEY: ${{ vars.BOOK_KEY }}
+      EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
+      ORIGIN: ${{ vars.ORIGIN }}
+      USER_POOL_ID: ${{ vars.USER_POOL_ID }}
+      OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
 
     steps:
       - name: Checkout repository
@@ -32,30 +41,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.REGION }}
 
-# ==============================
-# Usage:
-#   ./deploy.sh force it will deploy all the lambdas regardless of any change
-#   ./deploy.sh select get_google_sign_in_url [other_lambda_names] it will deploy only the selected lambdas 
-# ==============================
       - name: Deploy Lambdas
-        env:
-          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
-          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
-          COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
-          COGNITO_REDIRECT_URI: ${{ vars.COGNITO_REDIRECT_URI }}
-          BOOK_KEY: ${{ vars.BOOK_KEY }}
-          EBOOK_BUCKET: ${{ vars.EBOOK_BUCKET }}
-          ORIGIN: ${{ vars.ORIGIN }}
-          USER_POOL_ID: ${{ vars.USER_POOL_ID }}
-          OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
-          bash .github/scripts/deploy_lambdas.sh
+          bash .github/scripts/deploy_lambdas.sh auto
 
       - name: Update API Gateway routes
-        env:
-          ENV: ${{ github.event.inputs.environment }}
-          REST_API_ID: 1u8zyys7vb
-          REGION: ap-southeast-1
-          OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
           bash .github/scripts/update_routes.sh
