@@ -40,9 +40,16 @@ jobs:
       - name: Detect changed Lambda folders
         id: changed
         run: |
+          echo "Detecting changed Lambda folders..."
+          # Compare last commit with previous commit
           CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
             | grep '^lambdas/' | cut -d'/' -f2 | sort -u || true)
-          echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
+          if [[ -z "$CHANGED" ]]; then
+            echo "No Lambda changes detected."
+            echo "CHANGED_LAMBDAS=" >> $GITHUB_ENV
+          else
+            echo "Changed Lambdas: $CHANGED"
+            echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
 
       - name: Deploy changed Lambdas
         if: env.CHANGED_LAMBDAS != ''
@@ -54,4 +61,4 @@ jobs:
 
       - name: No changes
         if: env.CHANGED_LAMBDAS == ''
-        run: echo "No Lambda
+        run: echo "No Lambda changes detected, skipping deployment."
