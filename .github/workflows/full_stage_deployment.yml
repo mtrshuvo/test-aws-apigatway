@@ -77,7 +77,7 @@ jobs:
 
           if [[ "${{ github.event.inputs.lambdas }}" == "all" ]]; then
             echo "Deploying ALL lambdas..."
-            bash .github/scripts/deploy_lambdas.sh all
+            bash .github/scripts/deploy_lambdas.sh
           else
             for lambda in "${SELECTED[@]}"; do
               lambda=$(echo "$lambda" | xargs) # trim spaces
