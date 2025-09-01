@@ -58,15 +58,14 @@ jobs:
         run: |
           echo "Detecting changed Lambda folders..."
 
-          # Use a default value if this is the first commit or before SHA is empty
           BEFORE=${GITHUB_EVENT_BEFORE:-}
 
           if [[ -z "$BEFORE" ]] || [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
             echo "First commit on branch, taking all Lambda folders..."
-            CHANGED=$(find test-aws-apigatway -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
+            CHANGED=$(find . -maxdepth 1 -mindepth 1 -type d -not -name ".git" -not -name ".github" | xargs -n1 basename)
           else
             CHANGED=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" \
-              | grep '^test-aws-apigatway/' | cut -d'/' -f2 | sort -u || true)
+              | grep -E '^[^/]+/' | cut -d'/' -f1 | sort -u || true)
           fi
 
           if [[ -z "$CHANGED" ]]; then
@@ -76,7 +75,6 @@ jobs:
             echo "Changed Lambdas: $CHANGED"
             echo "CHANGED_LAMBDAS=$CHANGED" >> $GITHUB_ENV
           fi
-
 
       # Deploy changed Lambdas
       - name: Deploy changed Lambdas
