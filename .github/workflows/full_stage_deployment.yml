@@ -13,7 +13,7 @@ on:
       lambdas:
         description: |
           Comma-separated list of Lambdas to deploy (or 'all')  
-          Available options: \n 
+          Available options: 
           - get_google_sign_in_url  
           - get_ebook_metadata
         required: true
@@ -39,6 +39,27 @@ jobs:
       OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
 
     steps:
+      - name: Show available lambdas
+        run: |
+          echo "Available Lambdas from config:"
+          jq -r '.lambdas | keys[]' .github/config/lambdas.json
+
+      - name: Validate input lambdas
+        run: |
+          AVAILABLE=$(jq -r '.lambdas | keys[]' .github/config/lambdas.json)
+          if [[ "${{ github.event.inputs.lambdas }}" != "all" ]]; then
+            IFS=',' read -ra SELECTED <<< "${{ github.event.inputs.lambdas }}"
+            for lambda in "${SELECTED[@]}"; do
+              lambda=$(echo "$lambda" | xargs)
+              if ! echo "$AVAILABLE" | grep -qw "$lambda"; then
+                echo "Invalid lambda: $lambda"
+                echo "Valid lambdas are:"
+                echo "$AVAILABLE"
+                exit 1
+              fi
+            done
+          fi
+          echo "All specified lambdas are valid."
       - name: Checkout repository
         uses: actions/checkout@v4
 
