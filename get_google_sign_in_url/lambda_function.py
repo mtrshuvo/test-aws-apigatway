@@ -50,6 +50,7 @@ def lambda_handler(event, context):
             headers = base_header,
         )
 
+
     except Exception as e:
         return error_response(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
