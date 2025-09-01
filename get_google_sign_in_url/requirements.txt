@@ -1,2 +1,1 @@
 lambda-request-response
-boto3
