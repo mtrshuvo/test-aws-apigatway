@@ -32,6 +32,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
           aws-region: ${{ env.REGION }}
 
+# ==============================
+# Usage:
+#   ./deploy.sh auto it will check if there is any change in the lambda code, if yes, it will deploy the lambdas
+#   ./deploy.sh force it will deploy all the lambdas regardless of any change
+#   ./deploy.sh select get_google_sign_in_url [other_lambda_names] it will deploy only the selected lambdas 
+# ==============================
       - name: Deploy Lambdas
         env:
           ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
@@ -44,7 +50,7 @@ jobs:
           USER_POOL_ID: ${{ vars.USER_POOL_ID }}
           OPTIONS_CORS_DOMAIN: ${{ vars.OPTIONS_CORS_DOMAIN }}
         run: |
-          bash .github/scripts/deploy_lambdas.sh select get_ebook_metadata
+          bash .github/scripts/deploy_lambdas.sh auto
 
       - name: Update API Gateway routes
         env:
