@@ -10,6 +10,8 @@ on:
         options:
           - staging
           - prod
+          - dev
+
       lambdas:
         description: |
           Comma-separated list of Lambdas to deploy (or 'all')  
@@ -25,8 +27,8 @@ jobs:
     environment: ${{ github.event.inputs.environment }}
 
     env:
-      REST_API_ID: 1u8zyys7vb
-      REGION: ap-southeast-1
+      REST_API_ID: ${{vars.REST_API_ID}}
+      REGION: ${{vars.REGION}}
       ENV: ${{ github.event.inputs.environment }}
       ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
       COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
@@ -65,7 +67,7 @@ jobs:
           echo "All specified lambdas are valid."
 
       - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}

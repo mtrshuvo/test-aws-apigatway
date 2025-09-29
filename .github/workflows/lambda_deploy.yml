@@ -9,13 +9,9 @@ on:
 jobs:
   deploy-lambdas:
     runs-on: ubuntu-latest
-
-    # Select environment for GitHub environment secrets (optional)
     environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
-
-    # General environment variables (common for both prod & staging)
     env:
-      REGION: ap-southeast-1
+      REGION: ${{vars.REGION}}
       ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
       COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
       COGNITO_DOMAIN: ${{ vars.COGNITO_DOMAIN }}
@@ -68,7 +64,10 @@ jobs:
               CHANGED_FOLDERS=$(find . -maxdepth 1 -mindepth 1 -type d \
                 -not -name ".git" \
                 -not -name ".github" \
+                -not -name "node_modules" \
                 -not -name ".vscode" \
+                -not -name "dist" \
+                -not -name "build" \
                 | sed 's|^\./||' | tr '\n' ' ')
               echo "All lambda folders: $CHANGED_FOLDERS"
               echo "CHANGED_LAMBDAS=$CHANGED_FOLDERS" >> $GITHUB_ENV

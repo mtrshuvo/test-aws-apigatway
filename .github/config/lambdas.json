@@ -3,7 +3,6 @@
     "get_google_sign_in_url": {
       "runtime": "3.13",
       "env": {
-        "ALLOWED_ORIGINS": "${ALLOWED_ORIGINS}",
         "COGNITO_CLIENT_ID": "${COGNITO_CLIENT_ID}",
         "COGNITO_DOMAIN": "${COGNITO_DOMAIN}",
         "COGNITO_REDIRECT_URI": "${COGNITO_REDIRECT_URI}",
@@ -23,13 +22,23 @@
   "routes": {
     "/ebooks": {
       "methods": {
-        "GET": {"type": "lambda", "lambda_name": "get_ebook_metadata", "authorizer": "teen_${ENV}_authorizer"},
-        "OPTIONS": {"type": "cors", "origin": "${OPTIONS_CORS_DOMAIN}"}
+        "GET": {
+          "type": "lambda",
+          "lambda_name": "get_ebook_metadata",
+          "authorizer": "teen_${ENV}_authorizer"
+        },
+        "OPTIONS": {
+          "type": "cors",
+          "origin": "${OPTIONS_CORS_DOMAIN}"
+        }
       }
     },
     "/signin_url": {
       "methods": {
-        "GET": {"type": "lambda", "lambda_name": "get_google_sign_in_url"}
+        "GET": {
+          "type": "lambda",
+          "lambda_name": "get_google_sign_in_url"
+        }
       }
     }
   }
