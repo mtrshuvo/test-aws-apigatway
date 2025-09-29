@@ -54,7 +54,7 @@ jobs:
           echo "Detecting changed Lambda folders..."
           
           # Get the previous commit SHA
-          if [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]] || [[ -z "${{ github.event.before }}" ]]; then
+          if [[ "${{ github.event.before }}" =~ ^0+$ ]] || [[ -z "${{ github.event.before }}" ]]; then
             # First commit on branch or force push - compare with HEAD~1
             if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
               BEFORE_SHA="HEAD~1"
